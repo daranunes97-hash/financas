@@ -63,6 +63,12 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0 8px}
 .meta .acts{display:flex;gap:8px;margin-top:10px}
 .meta .acts button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px;font-weight:600}
 .meta .acts button.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.paycard{background:var(--card);border:2px solid var(--accent);border-radius:16px;padding:12px 14px;margin:0 0 14px;box-shadow:var(--shadow)}
+.paycard.late{border-color:var(--red)}
+.paycard .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.paycard .hd b{font-size:22px}
+.paycard ul{margin:8px 0 0;padding:0;list-style:none;font-size:14px;color:var(--muted)}
+.paycard li{display:flex;justify-content:space-between;padding:2px 0}
 .done{font-size:13px;color:var(--accent);font-weight:650}
 section{margin:18px 0}
 section h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
@@ -216,6 +222,44 @@ function calcMes(mes){
   return{entradas,saidas,sobra:entradas-saidas,falta,porCat,parcelas,fixas,faturas};
 }
 
+// ---------- Ajustes / contas do mês ----------
+function cfg(){return Object.assign({diaPag:10,lemDia:8,lemHora:"09:00"},S.items.get("config")||{});}
+function pendentes(mes){
+  const r=calcMes(mes),it=[];
+  r.fixas.filter(f=>f.tipo!=="entrada"&&!(f.pagas||[]).includes(mes)).forEach(f=>it.push({t:"fixa",o:f,nome:f.desc,v:fixaValor(f,mes)}));
+  r.faturas.filter(f=>!f.paga&&f.total>0).forEach(f=>it.push({t:"fat",o:f.card,nome:"Fatura "+f.card.nome,v:f.total}));
+  r.parcelas.filter(p=>p.tx.tipo!=="entrada"&&p.tx.metodo==="boleto"&&!(p.tx.pagas||[]).includes(mes)).forEach(p=>it.push({t:"bol",o:p.tx,nome:(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),v:p.valor}));
+  return it;
+}
+function payCard(mes){
+  const it=pendentes(mes);if(!it.length)return"";
+  const c=cfg(),tot=it.reduce((a,x)=>a+x.v,0),hoje=todayStr(),mesHoje=monthOf(hoje),dia=Number(hoje.slice(8));
+  let tit,late=false;
+  if(mes<mesHoje){tit="Ficou sem baixa em "+nomeMes(mes);late=true;}
+  else if(mes>mesHoje)tit="A pagar até dia "+c.diaPag;
+  else if(dia<c.diaPag){const n=c.diaPag-dia;tit="Faltam "+n+" dia"+(n>1?"s":"")+" para o dia "+c.diaPag;}
+  else if(dia===c.diaPag)tit="Hoje é dia de pagar! 💜";
+  else{tit="Passou do dia "+c.diaPag+" e ainda falta pagar";late=true;}
+  return '<div class="paycard'+(late?" late":"")+'"><div class="hd"><span style="font-weight:650">'+tit+'</span><b class="'+(late?"neg":"pos")+'">'+fmt(tot)+'</b></div>'
+   +'<ul>'+it.map(x=>'<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="'+({fixa:"pay-fixa",fat:"pay-fat",bol:"pay-bol"}[x.t])+'" data-id="'+x.o.id+'" aria-label="Marcar '+esc(x.nome)+' como pago"></button><span style="flex:1;color:var(--ink)">'+esc(x.nome)+'</span><span>'+fmt(x.v)+'</span></li>').join("")+'</ul>'
+   +'<div style="font-size:12px;color:var(--muted);margin-top:4px">Toque no quadradinho para dar baixa em uma conta, ou pague tudo de uma vez:</div>'
+   +'<button class="btn" style="margin-top:10px" data-a="pagar-tudo">'+(S.confirmPagar?"Toque de novo para confirmar ("+it.length+" contas)":"✓ Já paguei tudo")+'</button></div>';
+}
+async function pagarTudo(){
+  const mes=S.month;
+  for(const x of pendentes(mes)){const o=S.items.get(x.o.id);if(!o)continue;
+    if(!(o.pagas||[]).includes(mes))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([mes])}));}
+  S.confirmPagar=false;render();toast("Tudo pago em "+curtoMes(mes)+"! 🦄");
+}
+function agendaLink(){
+  const c=cfg(),d=new Date(),y=d.getFullYear(),m=d.getMonth()+1;
+  let ano=y,mm=m;if(d.getDate()>c.lemDia){mm++;if(mm>12){mm=1;ano++;}}
+  const dd=String(c.lemDia).padStart(2,"0"),[hh,mi]=c.lemHora.split(":"),ini=ano+String(mm).padStart(2,"0")+dd+"T"+hh+mi+"00";
+  const fimH=String((Number(hh)+1)%24).padStart(2,"0"),fim=ano+String(mm).padStart(2,"0")+dd+"T"+fimH+mi+"00";
+  const q=new URLSearchParams({action:"TEMPLATE",text:"💜 Pagar as contas do mês",details:"Abra o Minhas Finanças para ver o total a pagar até o dia "+c.diaPag+" e dar baixa.",dates:ini+"/"+fim,ctz:"America/Sao_Paulo",recur:"RRULE:FREQ=MONTHLY;BYMONTHDAY="+c.lemDia});
+  return "https://calendar.google.com/calendar/render?"+q.toString();
+}
+
 // ---------- Unicórnio ----------
 function humor(r){
   if(r.entradas<=0&&r.saidas<=0)return{k:"dorme",t:"Cochilando",m:"Nada lançado neste mês ainda. Me acorda quando entrar alguma coisa!"};
@@ -311,7 +355,7 @@ function viewMes(){
     +(()=>{const hm=humor(r),pct=r.entradas>0?Math.round(r.sobra/r.entradas*100):null;
       return '<div class="mood"><div class="uni">'+unicornio(hm.k)+'</div><div class="txt"><div class="lbl">'+hm.t+'</div><div class="msg">'+hm.m+'</div>'
       +'<small style="color:var(--muted)">Sobra do mês'+(pct!=null?' · '+pct+'% das entradas':'')+'</small><br><b class="'+(r.sobra>=0?"pos":"neg")+'">'+fmt(r.sobra)+'</b></div></div>';})()
-    +'</div>';
+    +'</div>'+payCard(mes);
 
   // Contas fixas
   const fx=r.fixas.slice().sort((a,b)=>(a.dia||0)-(b.dia||0));
@@ -692,8 +736,8 @@ document.addEventListener("click",async ev=>{
       else{const v=parseMoney(document.getElementById("mv").value);if(isNaN(v)||v<0){document.getElementById("merr").innerHTML='<div class="err">Valor inválido.</div>';return;}
         if(v===f.valor)delete valores[S.month];else valores[S.month]=v;}
       closeSheet();await store.set(Object.assign({},f,{valores}));break;}
-    case"pay-fixa":{const f=S.items.get(id);if(f)await store.set(Object.assign({},f,{pagas:toggleIn(f.pagas,S.month)}));break;}
-    case"pay-fat":{const c=S.items.get(id);if(c)await store.set(Object.assign({},c,{pagas:toggleIn(c.pagas,S.month)}));break;}
+    case"pay-fixa":{const f=S.items.get(id);if(f){const ja=(f.pagas||[]).includes(S.month);await store.set(Object.assign({},f,{pagas:toggleIn(f.pagas,S.month)}));if(!ja)toast(f.desc+" pago ✓");}break;}
+    case"pay-fat":{const c=S.items.get(id);if(c){const ja=(c.pagas||[]).includes(S.month);await store.set(Object.assign({},c,{pagas:toggleIn(c.pagas,S.month)}));if(!ja)toast("Fatura "+c.nome+" paga ✓");}break;}
     case"pay-bol":{const t=S.items.get(id);if(t)await store.set(Object.assign({},t,{pagas:toggleIn(t.pagas,S.month)}));break;}
     case"new-meta":metaForm();break;
     case"edit-meta":{const m=S.items.get(id);if(m)metaForm(m);break;}
@@ -703,6 +747,10 @@ document.addEventListener("click",async ev=>{
     case"dep-meta":case"ret-meta":{const m=S.items.get(id);if(m)depForm(m,a==="dep-meta"?1:-1);break;}
     case"save-dep":await saveDep();break;
     case"backup-menu":backupMenu();break;
+    case"save-cfg":{const g=id=>parseInt(document.getElementById(id).value,10);const dp=g("cfg-dia"),ld=g("cfg-ldia"),lh=document.getElementById("cfg-lhora").value||"09:00";
+      if(!(dp>=1&&dp<=31)||!(ld>=1&&ld<=28)){toast("Dia de pagamento 1–31; lembrete 1–28");break;}
+      await store.set({kind:"config",id:"config",diaPag:dp,lemDia:ld,lemHora:lh});backupMenu();toast("Ajustes salvos");break;}
+    case"pagar-tudo":if(!S.confirmPagar){S.confirmPagar=true;render();setTimeout(()=>{if(S.confirmPagar){S.confirmPagar=false;render();}},4000);}else await pagarTudo();break;
     case"do-backup":await doBackup();break;
     case"confirm-restore":{mem={};F.itens.forEach(o=>{mem[o.id]=o;});persist();closeSheet();applyAll();toast("Backup restaurado 💜");break;}
     case"new-card":cardForm();break;
@@ -745,7 +793,15 @@ function backupBanner(){
 function backupMenu(){
   F={type:"backup"};
   const ult=ultimoBackup();
-  openSheet('<h3>Backup dos seus dados<button class="x" data-a="close">×</button></h3>'
+  const c=cfg();
+  openSheet('<h3>Ajustes<button class="x" data-a="close">×</button></h3>'
+   +'<label class="f">Dia em que você paga as contas</label><input class="inp" id="cfg-dia" inputmode="numeric" value="'+c.diaPag+'">'
+   +'<label class="f" style="margin-top:16px">Lembrete no Google Agenda (todo mês)</label>'
+   +'<div class="two"><div><label class="f">Dia do lembrete</label><input class="inp" id="cfg-ldia" inputmode="numeric" value="'+c.lemDia+'"></div><div><label class="f">Horário</label><input class="inp" type="time" id="cfg-lhora" value="'+c.lemHora+'"></div></div>'
+   +'<button class="btn" data-a="save-cfg" style="margin-top:10px">Salvar ajustes</button>'
+   +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;color:var(--accent)" href="'+agendaLink()+'" target="_blank" rel="noopener">📅 Criar lembrete no Google Agenda</a>'
+   +'<p style="font-size:13px;color:var(--muted);margin:6px 0 0">Salve os ajustes antes. Abre o Google Agenda com o lembrete pronto: confira se está na sua conta pessoal e toque em Salvar. A notificação chega mesmo com o app fechado.</p>'
+   +'<h3 style="margin-top:22px">Backup dos seus dados</h3>'
    +'<p style="margin:0 0 10px;color:var(--muted);font-size:14px">Seus dados ficam guardados só neste celular, sem internet e sem login. Se trocar de aparelho, perder o celular ou limpar os dados do Chrome, só o backup salva você.</p>'
    +'<div class="hint">Último backup: <b>'+(ult?new Date(ult).toLocaleDateString("pt-BR")+' às '+new Date(ult).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"nunca")+'</b> · '+S.items.size+' registro(s) no app</div>'
    +'<button class="btn" data-a="do-backup">💾 Fazer backup agora</button>'
