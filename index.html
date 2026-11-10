@@ -138,7 +138,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="9/nov · parcelas já pagas";
+const VERSAO="9/nov · contas em aberto";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -280,25 +280,41 @@ function pendentes(mes){
   r.parcelas.filter(p=>p.tx.tipo!=="entrada"&&COM_BAIXA(p.tx.metodo)&&!(p.tx.pagas||[]).includes(mes)).forEach(p=>it.push({t:"bol",o:p.tx,nome:(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),v:p.valor}));
   return it;
 }
+function atrasadas(mes){
+  const out=[];
+  for(let k=12;k>=1;k--){const m=addM(mes,-k);pendentes(m).forEach(x=>out.push(Object.assign({mes:m},x)));}
+  return out;
+}
+function itemLi(x,mesRef){
+  return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="'+({fixa:"pay-fixa",fat:"pay-fat",bol:"pay-bol"}[x.t])+'" data-id="'+x.o.id+'" data-m="'+mesRef+'" aria-label="Marcar '+esc(x.nome)+' como pago"></button><span style="flex:1;color:var(--ink)">'+esc(x.nome)+'</span><span>'+fmt(x.v)+'</span></li>';
+}
 function payCard(mes){
-  const it=pendentes(mes);if(!it.length)return"";
-  const c=cfg(),tot=it.reduce((a,x)=>a+x.v,0),hoje=todayStr(),mesHoje=monthOf(hoje),dia=Number(hoje.slice(8));
+  const it=pendentes(mes),at=atrasadas(mes);if(!it.length&&!at.length)return"";
+  const c=cfg(),totM=it.reduce((a,x)=>a+x.v,0),totA=at.reduce((a,x)=>a+x.v,0),tot=totM+totA,hoje=todayStr(),mesHoje=monthOf(hoje),dia=Number(hoje.slice(8));
   let tit,late=false;
-  if(mes<mesHoje){tit="Ficou sem baixa em "+nomeMes(mes);late=true;}
+  if(!it.length){tit="Contas em aberto de meses anteriores";late=true;}
+  else if(mes<mesHoje){tit="Ficou sem baixa em "+nomeMes(mes);late=true;}
   else if(mes>mesHoje)tit="A pagar até dia "+c.diaPag;
-  else if(dia<c.diaPag){const n=c.diaPag-dia;tit="Faltam "+n+" dia"+(n>1?"s":"")+" para o dia "+c.diaPag;}
+  else if(dia<c.diaPag){const n=c.diaPag-dia;tit=(n>1?"Faltam ":"Falta ")+n+" dia"+(n>1?"s":"")+" para o dia "+c.diaPag;}
   else if(dia===c.diaPag)tit="Hoje é dia de pagar! 💜";
   else{tit="Passou do dia "+c.diaPag+" e ainda falta pagar";late=true;}
-  return '<div class="paycard'+(late?" late":"")+'"><div class="hd"><span style="font-weight:650">'+tit+'</span><b class="'+(late?"neg":"pos")+'">'+fmt(tot)+'</b></div>'
-   +'<ul>'+it.map(x=>'<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="'+({fixa:"pay-fixa",fat:"pay-fat",bol:"pay-bol"}[x.t])+'" data-id="'+x.o.id+'" aria-label="Marcar '+esc(x.nome)+' como pago"></button><span style="flex:1;color:var(--ink)">'+esc(x.nome)+'</span><span>'+fmt(x.v)+'</span></li>').join("")+'</ul>'
-   +'<div style="font-size:12px;color:var(--muted);margin-top:4px">Toque no quadradinho para dar baixa em uma conta, ou pague tudo de uma vez:</div>'
-   +'<button class="btn" style="margin-top:10px" data-a="pagar-tudo">'+(S.confirmPagar?"Toque de novo para confirmar ("+it.length+" contas)":"✓ Já paguei tudo")+'</button></div>';
+  let h='<div class="paycard'+(late?" late":"")+'"><div class="hd"><span style="font-weight:650">'+tit+'</span><b class="'+(late?"neg":"pos")+'">'+fmt(tot)+'</b></div>';
+  if(it.length)h+=(at.length?'<div style="font-size:12px;font-weight:650;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.05em">Deste mês · '+fmt(totM)+'</div>':'')+'<ul>'+it.map(x=>itemLi(x,mes)).join("")+'</ul>';
+  if(at.length){
+    const grupos={};at.forEach(x=>{(grupos[x.mes]=grupos[x.mes]||[]).push(x);});
+    h+='<div style="font-size:12px;font-weight:650;color:var(--red);margin-top:10px;text-transform:uppercase;letter-spacing:.05em">Em aberto de meses anteriores · '+fmt(totA)+'</div>';
+    Object.keys(grupos).sort().forEach(m=>{h+='<div style="font-size:13px;font-weight:650;margin-top:6px;text-transform:capitalize">'+nomeMes(m)+'</div><ul style="margin-top:0">'+grupos[m].map(x=>itemLi(x,m)).join("")+'</ul>';});
+  }
+  const q=it.length+at.length;
+  h+='<div style="font-size:12px;color:var(--muted);margin-top:4px">Toque no quadradinho para dar baixa'+(at.length?' (a conta fica paga no mês dela)':'')+', ou pague tudo de uma vez:</div>'
+   +'<button class="btn" style="margin-top:10px" data-a="pagar-tudo">'+(S.confirmPagar?"Toque de novo para confirmar ("+q+" contas)":"✓ Já paguei tudo")+'</button></div>';
+  return h;
 }
 async function pagarTudo(){
-  const mes=S.month;
-  for(const x of pendentes(mes)){const o=S.items.get(x.o.id);if(!o)continue;
-    if(!(o.pagas||[]).includes(mes))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([mes])}));}
-  S.confirmPagar=false;render();toast("Tudo pago em "+curtoMes(mes)+"! 🦄");
+  const mes=S.month,lista=pendentes(mes).map(x=>Object.assign({mes},x)).concat(atrasadas(mes));
+  for(const x of lista){const o=S.items.get(x.o.id);if(!o)continue;
+    if(!(o.pagas||[]).includes(x.mes))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([x.mes])}));}
+  S.confirmPagar=false;render();toast("Tudo pago! 🦄");
 }
 function agendaLink(){
   const c=cfg(),d=new Date(),y=d.getFullYear(),m=d.getMonth()+1;
@@ -400,7 +416,7 @@ function viewMes(){
   let h='<div class="tiles">'
     +'<div class="tile"><small>Entradas</small><b class="pos">'+fmt(r.entradas)+'</b></div>'
     +'<div class="tile"><small>Saídas</small><b class="neg">'+fmt(r.saidas)+'</b></div>'
-    +'<div class="tile"><small>Falta pagar</small><b>'+fmt(r.falta)+'</b></div>'
+    +(()=>{const fa=atrasadas(mes).reduce((a,x)=>a+x.v,0);return '<div class="tile"><small>Falta pagar'+(fa?' <span class="neg">· '+fmt(fa)+' atrasado</span>':'')+'</small><b'+(fa?' class="neg"':'')+'>'+fmt(r.falta+fa)+'</b></div>';})()
     +(()=>{const hm=humor(r),pct=r.entradas>0?Math.round(r.sobra/r.entradas*100):null;
       return '<div class="mood"><div class="uni">'+unicornio(hm.k)+'</div><div class="txt"><div class="lbl">'+hm.t+'</div><div class="msg">'+hm.m+'</div>'
       +'<small style="color:var(--muted)">Sobra do mês'+(pct!=null?' · '+pct+'% das entradas':'')+'</small><br><b class="'+(r.sobra>=0?"pos":"neg")+'">'+fmt(r.sobra)+'</b></div></div>';})()
@@ -587,7 +603,7 @@ function celebrar(m){
 function limiteUsado(card,excluir){
   const now=monthOf(todayStr());let u=0;
   all("tx").forEach(t=>{if(t.cardId!==card.id||t.tipo==="entrada"||t.id===excluir)return;
-    expand(t).forEach(p=>{if(p.mes>=now&&!(card.pagas||[]).includes(p.mes))u+=p.valor;});});
+    expand(t).forEach(p=>{if(!(card.pagas||[]).includes(p.mes))u+=p.valor;});});
   return Math.round(u*100)/100;
 }
 function viewCartoes(){
@@ -603,7 +619,7 @@ function viewCartoes(){
     else lim='<div class="s" style="margin-top:4px">Toque para informar o limite</div>';
     h+='<button class="row" data-a="edit-card" data-id="'+c.id+'" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">💳</span><div class="main"><div class="t">'+esc(c.nome)+'</div><div class="s">fecha dia '+c.fechamento+' · vence dia '+c.vencimento+'</div></div><span class="s">editar</span></div>'+lim+'</button>';
   });
-  h+='</div></section><div class="banner">O limite volta quando você marca a fatura como paga, e as faturas de meses que já passaram contam como pagas. Compra parcelada ocupa o valor total e vai liberando a cada fatura paga, igual ao banco.</div><div class="banner">Como funciona: compra feita <b>no dia do fechamento ou depois</b> vai para a fatura seguinte. Cada parcela aparece no mês em que a fatura <b>vence</b>.</div>';
+  h+='</div></section><div class="banner">O limite volta quando você marca a fatura como paga. Fatura de mês anterior sem baixa continua ocupando o limite (e aparece como em aberto no mês atual). Compra parcelada ocupa o valor total e vai liberando a cada fatura paga, igual ao banco.</div><div class="banner">Como funciona: compra feita <b>no dia do fechamento ou depois</b> vai para a fatura seguinte. Cada parcela aparece no mês em que a fatura <b>vence</b>.</div>';
   return h;
 }
 
@@ -818,9 +834,9 @@ document.addEventListener("click",async ev=>{
       else{const v=parseMoney(document.getElementById("mv").value);if(isNaN(v)||v<0){document.getElementById("merr").innerHTML='<div class="err">Valor inválido.</div>';return;}
         if(v===f.valor)delete valores[S.month];else valores[S.month]=v;}
       closeSheet();await store.set(Object.assign({},f,{valores}));break;}
-    case"pay-fixa":{const f=S.items.get(id);if(f){const ja=(f.pagas||[]).includes(S.month);await store.set(Object.assign({},f,{pagas:toggleIn(f.pagas,S.month)}));if(!ja)toast(f.desc+" pago ✓");}break;}
-    case"pay-fat":{const c=S.items.get(id);if(c){const ja=(c.pagas||[]).includes(S.month);await store.set(Object.assign({},c,{pagas:toggleIn(c.pagas,S.month)}));if(!ja)toast("Fatura "+c.nome+" paga ✓");}break;}
-    case"pay-bol":{const t=S.items.get(id);if(t)await store.set(Object.assign({},t,{pagas:toggleIn(t.pagas,S.month)}));break;}
+    case"pay-fixa":{const M=b.dataset.m||S.month,f=S.items.get(id);if(f){const ja=(f.pagas||[]).includes(M);await store.set(Object.assign({},f,{pagas:toggleIn(f.pagas,M)}));if(!ja)toast(f.desc+" pago ✓");}break;}
+    case"pay-fat":{const M=b.dataset.m||S.month,c=S.items.get(id);if(c){const ja=(c.pagas||[]).includes(M);await store.set(Object.assign({},c,{pagas:toggleIn(c.pagas,M)}));if(!ja)toast("Fatura "+c.nome+" paga ✓");}break;}
+    case"pay-bol":{const M=b.dataset.m||S.month,t=S.items.get(id);if(t)await store.set(Object.assign({},t,{pagas:toggleIn(t.pagas,M)}));break;}
     case"new-meta":metaForm();break;
     case"edit-meta":{const m=S.items.get(id);if(m)metaForm(m);break;}
     case"save-meta":await saveMeta();break;
