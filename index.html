@@ -535,14 +535,26 @@ function celebrar(m){
   F={type:"celebra"};
 }
 
+function limiteUsado(card,excluir){
+  const now=monthOf(todayStr());let u=0;
+  all("tx").forEach(t=>{if(t.cardId!==card.id||t.tipo==="entrada"||t.id===excluir)return;
+    expand(t).forEach(p=>{if(p.mes>=now&&!(card.pagas||[]).includes(p.mes))u+=p.valor;});});
+  return Math.round(u*100)/100;
+}
 function viewCartoes(){
   const cs=cards();
   let h='<section><h2>Seus cartões <button class="btn small" data-a="new-card">+ Novo</button></h2><div class="list">';
   if(!cs.length)h+='<div class="empty">Cadastre seu cartão com o dia de fechamento e o de vencimento. Assim cada parcela cai sozinha na fatura certa.</div>';
   cs.forEach(c=>{
-    h+='<button class="row" data-a="edit-card" data-id="'+c.id+'"><span style="font-size:20px">💳</span><div class="main"><div class="t">'+esc(c.nome)+'</div><div class="s">fecha dia '+c.fechamento+' · vence dia '+c.vencimento+'</div></div><span class="s">editar</span></button>';
+    let lim='';
+    if(c.limite>0){const u=limiteUsado(c),d=c.limite-u,pct=Math.min(100,Math.max(0,u/c.limite*100));
+      lim='<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:14px"><span>Disponível</span><b class="'+(d<0?"neg":"pos")+'">'+fmt(d)+'</b></div>'
+        +'<div class="bar"><i style="width:'+pct+'%;background:'+(pct>=90?"var(--red)":"linear-gradient(90deg,#b98af0,#f39bd0)")+'"></i></div>'
+        +'<div class="s">Usado '+fmt(u)+' de '+fmt(c.limite)+(d<0?' · <span class="neg">passou do limite</span>':pct>=90?' · <span class="neg">quase no limite</span>':'')+'</div>';}
+    else lim='<div class="s" style="margin-top:4px">Toque para informar o limite</div>';
+    h+='<button class="row" data-a="edit-card" data-id="'+c.id+'" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">💳</span><div class="main"><div class="t">'+esc(c.nome)+'</div><div class="s">fecha dia '+c.fechamento+' · vence dia '+c.vencimento+'</div></div><span class="s">editar</span></div>'+lim+'</button>';
   });
-  h+='</div></section><div class="banner">Como funciona: compra feita <b>no dia do fechamento ou depois</b> vai para a fatura seguinte. Cada parcela aparece no mês em que a fatura <b>vence</b>.</div>';
+  h+='</div></section><div class="banner">O limite volta quando você marca a fatura como paga, e as faturas de meses que já passaram contam como pagas. Compra parcelada ocupa o valor total e vai liberando a cada fatura paga, igual ao banco.</div><div class="banner">Como funciona: compra feita <b>no dia do fechamento ou depois</b> vai para a fatura seguinte. Cada parcela aparece no mês em que a fatura <b>vence</b>.</div>';
   return h;
 }
 
@@ -599,15 +611,19 @@ function txValorTotal(){
 function updatePreview(){
   const el=document.getElementById("prev");if(!el||!F||F.type!=="tx")return;
   const t=F.t,tot=txValorTotal();
-  if(t.tipo==="entrada"||isNaN(tot)||tot<=0){el.innerHTML="";return;}
+  const cardSel=t.tipo!=="entrada"&&t.metodo==="cartao"?cardById(t.cardId):null;
+  let limH="";
+  if(cardSel&&cardSel.limite>0){const d=cardSel.limite-limiteUsado(cardSel,t.id),dep=d-(isNaN(tot)?0:tot);
+    limH='<div class="hint" style="'+(dep<0?'background:var(--red-soft);color:var(--red)':'')+'">Limite disponível no '+esc(cardSel.nome)+': <b>'+fmt(d)+'</b>'+(!isNaN(tot)&&tot>0?'<br>Depois desta compra: <b>'+fmt(dep)+'</b>'+(dep<0?' · passa do limite!':''):'')+'</div>';}
+  if(t.tipo==="entrada"||isNaN(tot)||tot<=0){el.innerHTML=limH;return;}
   const tmp=Object.assign({},t,{valor:tot});
   const card=t.metodo==="cartao"?cardById(t.cardId):null;
-  if(!card&&t.parcelas<=1){el.innerHTML="";return;}
+  if(!card&&t.parcelas<=1){el.innerHTML=limH;return;}
   const ps=expand(tmp);
   let s;
   if(ps.length>1)s=ps.length+'x de '+fmt(ps[0].valor)+(ps[ps.length-1].valor!==ps[0].valor?' (última '+fmt(ps[ps.length-1].valor)+')':'')+' · total '+fmt(tot)+'<br>1ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
   else s='Entra na fatura que vence em <b>'+nomeMes(ps[0].mes)+'</b>';
-  el.innerHTML='<div class="hint">'+s+'</div>';
+  el.innerHTML='<div class="hint">'+s+'</div>'+limH;
 }
 async function saveTx(){
   readTxInputs();
@@ -678,6 +694,7 @@ function drawCard(){
    +'<label class="f">Nome do cartão</label><input class="inp" id="cn" placeholder="Ex.: Nubank, Itaú" value="'+esc(x.nome)+'">'
    +'<div class="two"><div><label class="f">Dia que a fatura fecha</label><input class="inp" id="cf" inputmode="numeric" value="'+esc(x.fechamento)+'"></div><div><label class="f">Dia que vence</label><input class="inp" id="cv" inputmode="numeric" value="'+esc(x.vencimento)+'"></div></div>'
    +'<div class="hint">No app do banco, o fechamento costuma aparecer como "melhor dia de compra".</div>'
+   +'<label class="f">Limite total do cartão (opcional)</label><input class="inp" id="cl" inputmode="decimal" placeholder="Ex.: 2.500,00" value="'+esc(x.limStr!=null?x.limStr:(x.limite?moneyStr(x.limite):""))+'">'
    +(F.err?'<div class="err">'+esc(F.err)+'</div>':'')
    +'<button class="btn" data-a="save-card">Salvar</button>'
    +(x.id?'<button class="btn ghost" data-a="del-card">'+(usado?"Este cartão tem compras e não pode ser apagado":(F.confirmDel?"Toque de novo para apagar":"Apagar cartão"))+'</button>':''));
@@ -685,10 +702,11 @@ function drawCard(){
 async function saveCard(){
   const g=id=>document.getElementById(id).value;
   const x=F.t;x.nome=g("cn").trim();const fe=parseInt(g("cf"),10),ve=parseInt(g("cv"),10);
-  x.fechamento=g("cf");x.vencimento=g("cv");
+  x.fechamento=g("cf");x.vencimento=g("cv");x.limStr=g("cl");const lim=x.limStr.trim()?parseMoney(x.limStr):0;
+  if(isNaN(lim)||lim<0){F.err="Limite inválido.";drawCard();return;}
   if(!x.nome){F.err="Dê um nome ao cartão.";drawCard();return;}
   if(!(fe>=1&&fe<=31)||!(ve>=1&&ve<=31)){F.err="Os dias precisam estar entre 1 e 31.";drawCard();return;}
-  const o={kind:"card",id:x.id||uid(),nome:x.nome,fechamento:fe,vencimento:ve,pagas:x.pagas||[]};
+  const o={kind:"card",id:x.id||uid(),nome:x.nome,fechamento:fe,vencimento:ve,limite:lim,pagas:x.pagas||[]};
   closeSheet();await store.set(o);
 }
 
