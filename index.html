@@ -138,7 +138,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="9/nov · categorias e limite";
+const VERSAO="9/nov · parcelas já pagas";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -160,6 +160,13 @@ function parseMoney(s){
   if(s.includes(",")) s=s.replace(/\./g,"").replace(",",".");
   const n=Number(s); return isFinite(n)?Math.round(n*100)/100:NaN;
 }
+const moneyIn=v=>v==null||isNaN(v)||v===""?"":"R$ "+Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+function mascaraValor(el){
+  const dig=el.value.replace(/\D/g,"").replace(/^0+/,"").slice(0,11);
+  el.value=dig?moneyIn(Number(dig)/100):"";
+  try{el.setSelectionRange(el.value.length,el.value.length);}catch(e){}
+}
+document.addEventListener("input",ev=>{if(ev.target.classList&&ev.target.classList.contains("money-in"))mascaraValor(ev.target);},true);
 const moneyStr=v=>v==null||isNaN(v)?"":v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function mk(y,m){y=y+Math.floor((m-1)/12);m=((m-1)%12+12)%12+1;return y+"-"+String(m).padStart(2,"0");}
@@ -188,13 +195,15 @@ function faturaMes(ds,card){
 // expande um lançamento em parcelas {mes,valor,i,n,tx}
 function expand(tx){
   const n=Math.max(1,Number(tx.parcelas)||1);
+  const k=Math.min(n-1,Math.max(0,Number(tx.jaPagas)||0)); // parcelas pagas antes de usar o app
   const card=tx.metodo==="cartao"?cardById(tx.cardId):null;
-  const first=card?faturaMes(tx.data,card):monthOf(tx.data);
+  // sem parcelas pagas: data = compra; com parcelas pagas: data = vencimento da próxima parcela
+  const prox=k>0?monthOf(tx.data):(card?faturaMes(tx.data,card):monthOf(tx.data));
   const tc=Math.round(tx.valor*100), base=Math.floor(tc/n);
   const out=[];
-  for(let i=0;i<n;i++){
+  for(let i=k;i<n;i++){
     const c=i===n-1?tc-base*(n-1):base;
-    out.push({mes:addM(first,i),valor:c/100,i:i+1,n,tx,card});
+    out.push({mes:addM(prox,i-k),valor:c/100,i:i+1,n,tx,card});
   }
   return out;
 }
@@ -475,11 +484,11 @@ function viewFuturo(){
   h+='<section><h2>Parcelamentos em andamento</h2><div class="list">';
   if(!ativos.length)h+='<div class="empty">Nenhuma compra parcelada em aberto.</div>';
   ativos.forEach(a=>{
-    const falta=a.rest.reduce((s,p)=>s+p.valor,0), feitas=a.ps.length-a.rest.length;
+    const nTot=a.ps[0].n, falta=a.rest.reduce((s,p)=>s+p.valor,0), feitas=nTot-a.rest.length;
     const onde=a.t.metodo==="cartao"?(cardById(a.t.cardId)||{nome:"Cartão"}).nome:(METODOS.find(m=>m[0]===a.t.metodo)||["","Carnê"])[1];
     h+='<button class="row" data-a="edit-tx" data-id="'+a.t.id+'" style="display:block"><div style="display:flex;justify-content:space-between;gap:8px"><span class="t">'+esc(a.t.desc||a.t.categoria)+'</span><span class="v">'+fmt(falta)+'</span></div>'
       +'<div class="s">'+esc(onde)+' · '+a.ps[0].n+'x de '+fmt(a.ps[0].valor)+' · faltam '+a.rest.length+' · última em '+curtoMes(a.fim)+'</div>'
-      +'<div class="bar"><i style="width:'+(feitas/a.ps.length*100)+'%;background:var(--accent)"></i></div></button>';
+      +'<div class="bar"><i style="width:'+(feitas/nTot*100)+'%;background:var(--accent)"></i></div></button>';
   });
   h+='</div></section>';
   return h;
@@ -526,7 +535,7 @@ function viewMetas(){
 }
 function metaForm(m){
   const x=m?JSON.parse(JSON.stringify(m)):{id:null,kind:"meta",nome:"",alvo:null,prazo:"",emoji:"🦄",depositos:[],criado:new Date().toISOString()};
-  F={type:"meta",t:x,valStr:x.alvo!=null?moneyStr(x.alvo):"",confirmDel:false,err:""};drawMeta();
+  F={type:"meta",t:x,valStr:x.alvo!=null?moneyIn(x.alvo):"",confirmDel:false,err:""};drawMeta();
 }
 function drawMeta(){
   const x=F.t;
@@ -534,7 +543,7 @@ function drawMeta(){
   let h='<h3>'+(x.id?"Editar meta":"Nova meta")+'<button class="x" data-a="close">×</button></h3>'
    +'<label class="f">Ícone</label><div class="chips">'+EMOJIS.map(e=>'<button class="chip '+(x.emoji===e?"on":"")+'" data-f="emoji" data-v="'+e+'" style="font-size:18px;padding:5px 10px">'+e+'</button>').join("")+'</div>'
    +'<label class="f">Nome da meta</label><input class="inp" id="mn" placeholder="Ex.: Viagem, Reserva de emergência" value="'+esc(x.nome)+'">'
-   +'<div class="two"><div><label class="f">Quanto quer juntar</label><input class="inp" id="ma" inputmode="decimal" placeholder="0,00" value="'+esc(F.valStr)+'"></div><div><label class="f">Até quando (opcional)</label><input class="inp" type="month" id="mp" value="'+esc(x.prazo||"")+'"></div></div>'
+   +'<div class="two"><div><label class="f">Quanto quer juntar</label><input class="inp money-in" id="ma" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.valStr)+'"></div><div><label class="f">Até quando (opcional)</label><input class="inp" type="month" id="mp" value="'+esc(x.prazo||"")+'"></div></div>'
    +(F.err?'<div class="err">'+esc(F.err)+'</div>':'')
    +'<button class="btn" data-a="save-meta">Salvar</button>';
   if(x.id){
@@ -555,7 +564,7 @@ function depForm(m,sinal){
   F={type:"dep",id:m.id,sinal,err:""};
   const i=metaInfo(m);
   openSheet('<h3>'+(sinal>0?"Guardar em ":"Retirar de ")+esc(m.emoji||"")+' '+esc(m.nome)+'<button class="x" data-a="close">×</button></h3>'
-   +'<input class="inp money" id="dv" inputmode="decimal" placeholder="0,00" autocomplete="off">'
+   +'<input class="inp money money-in" id="dv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">'
    +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="dd" value="'+todayStr()+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="dn" placeholder="Ex.: 13º"></div></div>'
    +(sinal<0?'<div class="hint">Guardado hoje: '+fmt(i.guard)+'</div>':(i.porMes!=null?'<div class="hint">Sugestão para bater no prazo: '+fmt(i.porMes)+' por mês</div>':''))
    +'<div id="derr"></div><button class="btn" data-a="save-dep">'+(sinal>0?"Guardar":"Retirar")+'</button>');
@@ -605,7 +614,9 @@ let F=null; // estado do formulário aberto
 
 function txForm(tx){
   const t=tx?JSON.parse(JSON.stringify(tx)):{id:null,kind:"tx",tipo:"saida",valor:null,desc:"",categoria:"Mercado",metodo:"pix",cardId:null,parcelas:1,data:todayStr()};
-  F={type:"tx",t,valStr:t.valor!=null?moneyStr(t.valor):"",modoValor:"total",confirmDel:false,err:""};
+  t.jaPagas=Number(t.jaPagas)||0;
+  const nP=Math.max(1,Number(t.parcelas)||1);
+  F={type:"tx",t,valStr:t.valor!=null?moneyIn(nP>1?Math.round(t.valor*100/nP)/100:t.valor):"",modoValor:"parcela",confirmDel:false,err:""};
   drawTx(true);
 }
 function drawTx(focus){
@@ -616,7 +627,7 @@ function drawTx(focus){
   if(!parcelavel)t.parcelas=1;
   let h='<h3>'+(t.id?"Editar lançamento":"Novo lançamento")+'<button class="x" data-a="close">×</button></h3>'
     +'<div class="seg"><button class="out '+(!ent?"on":"")+'" data-f="tipo" data-v="saida">Saída</button><button class="in '+(ent?"on":"")+'" data-f="tipo" data-v="entrada">Entrada</button></div>'
-    +'<input class="inp money" id="fv" inputmode="decimal" placeholder="0,00" value="'+esc(F.valStr)+'" autocomplete="off">'
+    +'<input class="inp money money-in" id="fv" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.valStr)+'" autocomplete="off">'
     +'<label class="f">'+(ent?"De onde veio":"Onde / com quem")+'</label><input class="inp" id="fd" placeholder="'+(ent?"Ex.: salário, venda…":"Ex.: Shopee, Quero-Quero, Carla…")+'" value="'+esc(t.desc)+'">'
     +'<label class="f">Categoria</label><div class="chips">'+cats.map(([c])=>'<button class="chip '+(t.categoria===c?"on":"")+'" data-f="categoria" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")
     +'<button class="chip" data-a="nova-cat-inline" style="border-style:dashed">+ Nova</button></div>'
@@ -629,9 +640,14 @@ function drawTx(focus){
   }
   if(parcelavel){
     h+='<label class="f">Parcelas</label><div class="stepper"><button data-a="parc-" aria-label="Menos">−</button><input class="inp" id="fp" inputmode="numeric" value="'+t.parcelas+'"><button data-a="parc+" aria-label="Mais">+</button>'
-      +'</div>'+(t.parcelas>1?'<label class="f">O valor que digitei é</label><div class="seg" style="margin:0"><button class="'+(F.modoValor==="total"?"on":"")+'" data-f="modo" data-v="total">O total da compra</button><button class="'+(F.modoValor==="parcela"?"on":"")+'" data-f="modo" data-v="parcela">O de cada parcela</button></div>':'');
+      +'</div>'+(t.parcelas>1?'<label class="f">O valor que digitei é</label><div class="seg" style="margin:0"><button class="'+(F.modoValor==="parcela"?"on":"")+'" data-f="modo" data-v="parcela">O de cada parcela</button><button class="'+(F.modoValor==="total"?"on":"")+'" data-f="modo" data-v="total">O total da compra</button></div>':'');
   }
-  h+='<label class="f">'+(t.parcelas>1?"Data da compra":"Data")+'</label><input class="inp" type="date" id="fdt" value="'+esc(t.data)+'">';
+  if(t.parcelas>1){
+    if(t.jaPagas>t.parcelas-1)t.jaPagas=t.parcelas-1;
+    h+='<label class="f">Quantas parcelas você já pagou antes?</label><div class="stepper"><button data-a="pag-" aria-label="Menos">−</button><input class="inp" id="fjp" inputmode="numeric" value="'+t.jaPagas+'"><button data-a="pag+" aria-label="Mais">+</button><span style="font-size:13px;color:var(--muted)">'+(t.jaPagas>0?'a próxima é a '+(t.jaPagas+1)+'ª de '+t.parcelas:'nenhuma, é compra nova')+'</span></div>';
+  }else t.jaPagas=0;
+  const lblData=t.parcelas>1?(t.jaPagas>0?(t.metodo==="cartao"?"Vencimento da fatura da "+(t.jaPagas+1)+"ª parcela":"Vencimento da "+(t.jaPagas+1)+"ª parcela"):"Data da compra"):"Data";
+  h+='<label class="f">'+lblData+'</label><input class="inp" type="date" id="fdt" value="'+esc(t.data)+'">';
   h+='<div id="prev"></div>';
   if(F.err)h+='<div class="err">'+esc(F.err)+'</div>';
   h+='<button class="btn" data-a="save-tx">Salvar</button>';
@@ -645,6 +661,7 @@ function readTxInputs(){
   const v=document.getElementById("fv"),d=document.getElementById("fd"),p=document.getElementById("fp"),dt=document.getElementById("fdt");
   if(v)F.valStr=v.value; if(d)F.t.desc=d.value; if(dt&&dt.value)F.t.data=dt.value;
   if(p){const n=parseInt(p.value,10);F.t.parcelas=Math.min(120,Math.max(1,isNaN(n)?1:n));}
+  const jp=document.getElementById("fjp");if(jp){const k=parseInt(jp.value,10);F.t.jaPagas=Math.min(F.t.parcelas-1,Math.max(0,isNaN(k)?0:k));}
 }
 function txValorTotal(){
   const v=parseMoney(F.valStr);if(isNaN(v))return NaN;
@@ -655,7 +672,7 @@ function updatePreview(){
   const t=F.t,tot=txValorTotal();
   const cardSel=t.tipo!=="entrada"&&t.metodo==="cartao"?cardById(t.cardId):null;
   let limH="";
-  if(cardSel&&cardSel.limite>0){const d=cardSel.limite-limiteUsado(cardSel,t.id),dep=d-(isNaN(tot)?0:tot);
+  if(cardSel&&cardSel.limite>0){const d=cardSel.limite-limiteUsado(cardSel,t.id),dep=d-(isNaN(tot)?0:expand(Object.assign({},t,{valor:tot})).reduce((a,p)=>a+p.valor,0));
     limH='<div class="hint" style="'+(dep<0?'background:var(--red-soft);color:var(--red)':'')+'">Limite disponível no '+esc(cardSel.nome)+': <b>'+fmt(d)+'</b>'+(!isNaN(tot)&&tot>0?'<br>Depois desta compra: <b>'+fmt(dep)+'</b>'+(dep<0?' · passa do limite!':''):'')+'</div>';}
   if(t.tipo==="entrada"||isNaN(tot)||tot<=0){el.innerHTML=limH;return;}
   const tmp=Object.assign({},t,{valor:tot});
@@ -663,7 +680,9 @@ function updatePreview(){
   if(!card&&t.parcelas<=1){el.innerHTML=limH;return;}
   const ps=expand(tmp);
   let s;
-  if(ps.length>1)s=ps.length+'x de '+fmt(ps[0].valor)+(ps[ps.length-1].valor!==ps[0].valor?' (última '+fmt(ps[ps.length-1].valor)+')':'')+' · total '+fmt(tot)+'<br>1ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
+  const nT=ps[0].n,kP=nT-ps.length;
+  if(nT>1&&kP>0)s=nT+'x de '+fmt(ps[0].valor)+' · já pagou '+kP+', faltam <b>'+ps.length+'</b> ('+fmt(ps.reduce((a,p)=>a+p.valor,0))+')<br>'+(kP+1)+'ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
+  else if(ps.length>1)s=ps.length+'x de '+fmt(ps[0].valor)+(ps[ps.length-1].valor!==ps[0].valor?' (última '+fmt(ps[ps.length-1].valor)+')':'')+' · total '+fmt(tot)+'<br>1ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
   else s='Entra na fatura que vence em <b>'+nomeMes(ps[0].mes)+'</b>';
   el.innerHTML='<div class="hint">'+s+'</div>'+limH;
 }
@@ -674,16 +693,16 @@ async function saveTx(){
   if(!t.data){F.err="Escolha a data.";drawTx();return;}
   if(t.tipo!=="entrada"&&t.metodo==="cartao"&&!cardById(t.cardId)){F.err="Escolha o cartão.";drawTx();return;}
   const o={kind:"tx",id:t.id||uid(),tipo:t.tipo,valor:tot,desc:(t.desc||"").trim(),categoria:t.categoria,
-    metodo:t.tipo==="entrada"?"entrada":t.metodo,cardId:t.metodo==="cartao"?t.cardId:null,parcelas:t.parcelas||1,data:t.data,pagas:t.pagas||[]};
+    metodo:t.tipo==="entrada"?"entrada":t.metodo,cardId:t.metodo==="cartao"?t.cardId:null,parcelas:t.parcelas||1,jaPagas:(t.parcelas>1?t.jaPagas||0:0),data:t.data,pagas:t.pagas||[]};
   const novo=!t.id;
   closeSheet();
   await store.set(o);
-  if(novo){const mesAlvo=expand(o)[0].mes;toast(o.parcelas>1?"Lançado em "+o.parcelas+" parcelas":"Lançado em "+curtoMes(mesAlvo));}
+  if(novo){const mesAlvo=expand(o)[0].mes;toast(o.parcelas>1?"Lançado: "+(o.parcelas-o.jaPagas)+" parcela(s) a pagar":"Lançado em "+curtoMes(mesAlvo));}
 }
 
 function fixaForm(f){
   const x=f?JSON.parse(JSON.stringify(f)):{id:null,kind:"fixa",tipo:"saida",desc:"",valor:null,dia:10,categoria:"Contas",inicio:S.month,fim:"",pagas:[],valores:{}};
-  F={type:"fixa",t:x,valStr:x.valor!=null?moneyStr(x.valor):"",confirmDel:false,err:""};drawFixa();
+  F={type:"fixa",t:x,valStr:x.valor!=null?moneyIn(x.valor):"",confirmDel:false,err:""};drawFixa();
 }
 function drawFixa(){
   const x=F.t,ent=x.tipo==="entrada",cats=getCats(ent?"entrada":"saida");
@@ -691,7 +710,7 @@ function drawFixa(){
   let h='<h3>'+(x.id?"Editar conta fixa":"Nova conta fixa")+'<button class="x" data-a="close">×</button></h3>'
    +'<div class="seg"><button class="out '+(!ent?"on":"")+'" data-f="tipo" data-v="saida">Conta a pagar</button><button class="in '+(ent?"on":"")+'" data-f="tipo" data-v="entrada">Recebimento</button></div>'
    +'<label class="f">Descrição</label><input class="inp" id="xd" placeholder="'+(ent?"Ex.: Salário":"Ex.: Aluguel, Luz, Internet")+'" value="'+esc(x.desc)+'">'
-   +'<div class="two"><div><label class="f">Valor por mês</label><input class="inp" id="xv" inputmode="decimal" placeholder="0,00" value="'+esc(F.valStr)+'"></div><div><label class="f">Dia</label><input class="inp" id="xdia" inputmode="numeric" value="'+esc(x.dia)+'"></div></div>'
+   +'<div class="two"><div><label class="f">Valor por mês</label><input class="inp money-in" id="xv" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.valStr)+'"></div><div><label class="f">Dia</label><input class="inp" id="xdia" inputmode="numeric" value="'+esc(x.dia)+'"></div></div>'
    +'<label class="f">Categoria</label><div class="chips">'+cats.map(([c])=>'<button class="chip '+(x.categoria===c?"on":"")+'" data-f="categoria" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")+'</div>'
    +'<div class="two"><div><label class="f">Começa em</label><input class="inp" type="month" id="xi" value="'+esc(x.inicio)+'"></div><div><label class="f">Termina em (opcional)</label><input class="inp" type="month" id="xf" value="'+esc(x.fim||"")+'"></div></div>'
    +(x.id?'<div class="hint">Mudar o valor aqui vale para todos os meses. Para mudar só um mês (ex.: conta de luz), toque na conta dentro do mês.</div>':'')
@@ -718,7 +737,7 @@ function fixaMesForm(f){
   const mes=S.month,ent=f.tipo==="entrada";
   F={type:"fixames",id:f.id,err:""};
   openSheet('<h3>'+esc(f.desc)+' · '+curtoMes(mes)+'<button class="x" data-a="close">×</button></h3>'
-   +'<label class="f">Valor só deste mês</label><input class="inp money" id="mv" inputmode="decimal" value="'+esc(moneyStr(fixaValor(f,mes)))+'">'
+   +'<label class="f">Valor só deste mês</label><input class="inp money money-in" id="mv" inputmode="numeric" value="'+esc(moneyIn(fixaValor(f,mes)))+'">'
    +'<div class="hint">O valor padrão é '+fmt(f.valor)+'. Use isto para contas que mudam (luz, água) ou um salário diferente.</div>'
    +'<div id="merr"></div><button class="btn" data-a="save-fixames">Salvar este mês</button>'
    +(f.valores&&f.valores[mes]!=null?'<button class="btn ghost" style="color:var(--ink)" data-a="reset-fixames">Voltar ao valor padrão</button>':'')
@@ -736,7 +755,7 @@ function drawCard(){
    +'<label class="f">Nome do cartão</label><input class="inp" id="cn" placeholder="Ex.: Nubank, Itaú" value="'+esc(x.nome)+'">'
    +'<div class="two"><div><label class="f">Dia que a fatura fecha</label><input class="inp" id="cf" inputmode="numeric" value="'+esc(x.fechamento)+'"></div><div><label class="f">Dia que vence</label><input class="inp" id="cv" inputmode="numeric" value="'+esc(x.vencimento)+'"></div></div>'
    +'<div class="hint">No app do banco, o fechamento costuma aparecer como "melhor dia de compra".</div>'
-   +'<label class="f">Limite total do cartão (opcional)</label><input class="inp" id="cl" inputmode="decimal" placeholder="Ex.: 2.500,00" value="'+esc(x.limStr!=null?x.limStr:(x.limite?moneyStr(x.limite):""))+'">'
+   +'<label class="f">Limite total do cartão (opcional)</label><input class="inp money-in" id="cl" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(x.limStr!=null?x.limStr:(x.limite?moneyIn(x.limite):""))+'">'
    +(F.err?'<div class="err">'+esc(F.err)+'</div>':'')
    +'<button class="btn" data-a="save-card">Salvar</button>'
    +(x.id?'<button class="btn ghost" data-a="del-card">'+(usado?"Este cartão tem compras e não pode ser apagado":(F.confirmDel?"Toque de novo para apagar":"Apagar cartão"))+'</button>':''));
@@ -784,6 +803,7 @@ document.addEventListener("click",async ev=>{
     case"go-cartoes":closeSheet();S.tab="cartoes";render();cardForm();break;
     case"close":closeSheet();break;
     case"edit-tx":{const t=S.items.get(id);if(t)txForm(t);break;}
+    case"pag-":case"pag+":readTxInputs();F.t.jaPagas=Math.min(F.t.parcelas-1,Math.max(0,F.t.jaPagas+(a==="pag+"?1:-1)));drawTx();break;
     case"parc-":case"parc+":readTxInputs();F.t.parcelas=Math.min(120,Math.max(1,F.t.parcelas+(a==="parc+"?1:-1)));drawTx();break;
     case"save-tx":await saveTx();break;
     case"del-tx":if(!F.confirmDel){readTxInputs();F.confirmDel=true;drawTx();}else{const i=F.t.id;closeSheet();await store.del(i);toast("Lançamento apagado");}break;
@@ -843,7 +863,7 @@ document.addEventListener("click",async ev=>{
 document.getElementById("fab").addEventListener("click",()=>txForm());
 document.addEventListener("input",ev=>{
   if(!F||F.type!=="tx")return;
-  if(["fv","fp","fdt"].includes(ev.target.id)){readTxInputs();updatePreview();}
+  if(["fv","fp","fdt","fjp"].includes(ev.target.id)){readTxInputs();updatePreview();}
 });
 document.addEventListener("keydown",ev=>{
   if(ev.key==="Escape"&&F)closeSheet();
