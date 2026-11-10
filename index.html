@@ -138,6 +138,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 (function(){
 "use strict";
 // ---------- Constantes ----------
+const VERSAO="9/nov · categorias e limite";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -884,6 +885,7 @@ function backupMenu(){
    +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;color:var(--accent)" href="'+agendaLink()+'" target="_blank" rel="noopener">📅 Criar lembrete no Google Agenda</a>'
    +'<p style="font-size:13px;color:var(--muted);margin:6px 0 0">Salve os ajustes antes. Abre o Google Agenda com o lembrete pronto: confira se está na sua conta pessoal e toque em Salvar. A notificação chega mesmo com o app fechado.</p>'
    +'<button class="btn ghost" style="color:var(--ink)" data-a="cats-menu" data-v="saida">🏷️ Gerenciar categorias</button>'
+   +'<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px">Versão do app: <b>'+VERSAO+'</b></div>'
    +'<h3 style="margin-top:22px">Backup dos seus dados</h3>'
    +'<p style="margin:0 0 10px;color:var(--muted);font-size:14px">Seus dados ficam guardados só neste celular, sem internet e sem login. Se trocar de aparelho, perder o celular ou limpar os dados do Chrome, só o backup salva você.</p>'
    +'<div class="hint">Último backup: <b>'+(ult?new Date(ult).toLocaleDateString("pt-BR")+' às '+new Date(ult).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"nunca")+'</b> · '+S.items.size+' registro(s) no app</div>'
@@ -928,7 +930,11 @@ function init(){
   try{mem=JSON.parse(localStorage.getItem(KEY)||"{}")||{};}catch(e){mem={};}
   applyAll();
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
-  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){
+    const tinha=!!navigator.serviceWorker.controller;let recarregou=false;
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{if(tinha&&!recarregou){recarregou=true;location.reload();}});
+    navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>r.update()).catch(()=>{});
+  }
 }
 init();
 })();
