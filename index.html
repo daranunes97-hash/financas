@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="11/nov · conta do pai por período";
+const VERSAO="11/nov · desconto na parcela";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -320,11 +320,12 @@ function expand(tx){
   // sem parcelas pagas: data = compra; com parcelas pagas: data = vencimento da próxima parcela
   const prox=k>0?monthOf(tx.data):(card?faturaMes(tx.data,card):monthOf(tx.data));
   const tc=Math.round(tx.valor*100), base=Math.floor(tc/n);
-  const out=[],ant=tx.antecipadas||[];
+  const out=[],ant=tx.antecipadas||[],dsc=tx.descontos||{};
   for(let i=k;i<n;i++){
     const c=i===n-1?tc-base*(n-1):base,mes=addM(prox,i-k);
     if(ant.includes(mes))continue; // parcela antecipada
-    out.push({mes,valor:c/100,i:i+1,n,tx,card});
+    const temD=dsc[mes]!=null&&!isNaN(Number(dsc[mes]));
+    out.push({mes,valor:temD?Number(dsc[mes]):c/100,orig:c/100,desc:temD,i:i+1,n,tx,card});
   }
   return out;
 }
@@ -515,7 +516,9 @@ function parteForm(t,id,m){
    +(ja?'<div class="hint">Esta conta está marcada como paga ✓</div>'
      :'<label class="f">Paguei uma parte</label><input class="inp money money-in" id="qv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">'
       +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="qd" value="'+todayStr()+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="qn" placeholder="Ex.: dei pro pai"></div></div>'
-      +'<div id="qerr"></div><button class="btn" data-a="save-parte">Registrar pagamento parcial</button>')
+      +'<div id="qerr"></div><button class="btn" data-a="save-parte">Registrar pagamento parcial</button>'
+      +(t==="bol"?'<label class="f" style="margin-top:16px">Ou: paguei com desconto e quitei</label><input class="inp money-in" id="qdv" inputmode="numeric" placeholder="Valor que você pagou de verdade"><button class="btn ghost" style="color:var(--accent)" data-a="save-desc">Quitar com este valor</button>'
+        :t==="fat"?'<div class="hint" style="margin-top:10px">Pagou alguma parcela com desconto? Abra a fatura na tela principal, toque na parcela e preencha "Valor pago com desconto".</div>':''))
    +'<button class="btn ghost" style="color:var(--ink)" data-a="'+PAY_A[t]+'" data-id="'+id+'" data-m="'+m+'" data-fecha="1">'+(ja?"Desmarcar como pago":"✓ Paguei tudo")+'</button>');
 }
 async function saveParte(){
@@ -720,7 +723,7 @@ function viewMes(){
       if(open){
         h+='<div class="sub">'+f.ps.sort((a,b)=>a.tx.data.localeCompare(b.tx.data)).map(p=>p.fixa
           ?'<button class="row" data-a="fixa-mes" data-id="'+p.fixa.id+'" data-m="'+p.m+'"><span class="dot" style="background:'+catColor(p.tx.categoria,false)+'"></span><div class="main"><div class="t">'+esc(p.tx.desc)+'<span class="badge">fixa</span></div><div class="s">cobrada em '+fmtData(p.tx.data)+' · '+esc(p.tx.categoria)+'</div></div><div class="v">'+fmt(p.valor)+'</div></button>'
-          :'<button class="row" data-a="edit-tx" data-id="'+p.tx.id+'"><span class="dot" style="background:'+(catColor(p.tx.categoria,false))+'"></span><div class="main"><div class="t">'+esc(p.tx.desc||p.tx.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+(emp?'pegou em ':'compra em ')+fmtData(p.tx.data)+' · '+esc(p.tx.categoria)+'</div></div><div class="v">'+fmt(p.valor)+'</div></button>').join("")
+          :'<button class="row" data-a="edit-tx" data-id="'+p.tx.id+'"><span class="dot" style="background:'+(catColor(p.tx.categoria,false))+'"></span><div class="main"><div class="t">'+esc(p.tx.desc||p.tx.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+(emp?'pegou em ':'compra em ')+fmtData(p.tx.data)+' · '+esc(p.tx.categoria)+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></div><div class="v">'+fmt(p.valor)+'</div></button>').join("")
           +(f.paga?'':'<button class="row" data-a="pagar-parte" data-t="fat" data-id="'+f.card.id+'" data-m="'+f.m+'"><span style="width:26px;text-align:center">💸</span><div class="main"><div class="t" style="color:var(--accent);font-weight:600">Paguei uma parte</div></div></button>')+'</div>';
       }
     });
@@ -749,7 +752,7 @@ function lancMesHTML(r){
     h+='<div class="row '+(pg?"paid":"")+'">'
       +(bol?'<button class="check '+(pg?"on":"")+'" data-a="pay-bol" data-id="'+t.id+'" data-m="'+p.mes+'" aria-label="Marcar parcela paga">'+(pg?"✓":"")+'</button>'
         :pai?'<span class="check" style="border:0">👨</span>':'<span class="dot" style="background:'+(catColor(t.categoria,ent))+'"></span>')
-      +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="edit-tx" data-id="'+t.id+'"><div class="t">'+esc(t.desc||t.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+(p.n>1?'compra em ':'')+fmtData(t.data)+' · '+esc(t.categoria)+' · '+met+(parte?' · pago '+fmt(parte):'')+'</div></button>'
+      +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="edit-tx" data-id="'+t.id+'"><div class="t">'+esc(t.desc||t.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+(p.n>1?'compra em ':'')+fmtData(t.data)+' · '+esc(t.categoria)+' · '+met+(parte?' · pago '+fmt(parte):'')+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></button>'
       +'<div class="v '+(ent?"pos":"")+'">'+(ent?"+":"")+fmt(p.valor)+(jurosTx(p)?'<div class="s neg" style="text-align:right">+ '+fmt(jurosTx(p))+' juros</div>':'')+'</div></div>';
   });
   r.antecip.sort((a,b)=>b.a.data.localeCompare(a.a.data)).forEach(({c,a})=>{
@@ -953,8 +956,10 @@ function cardEmprestimo(c){
     +(abertas.length?'<div class="s" style="font-size:12px;color:var(--muted)">'+abertas.length+' parcela(s) em aberto · última em '+nomeMes(abertas[abertas.length-1].mes)+'</div>':'')
     +(jurosAb>0.005?'<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:14px"><span>Desse total, é juros'+(semPego?'*':'')+'</span><b class="neg">'+fmt(jurosAb)+'</b></div>':'')
     +(semPego?'<div class="s" style="font-size:12px;color:var(--muted);margin-top:4px">'+(jurosAb>0.005?'* ':'')+semPego+' empréstimo(s) sem o valor que você pegou. Abra cada um e preencha "Quanto você pegou" para ver os juros.</div>':'');
-  const ants=(c.antecipacoes||[]).slice().sort((a,b)=>b.data.localeCompare(a.data)),eco=ants.reduce((a,x)=>a+(x.original-x.valor),0);
-  if(eco>0.005)h+='<div class="done" style="margin-top:8px">🎉 Você já economizou '+fmt(eco)+' antecipando</div>';
+  const ants=(c.antecipacoes||[]).slice().sort((a,b)=>b.data.localeCompare(a.data));
+  let eco=ants.reduce((a,x)=>a+(x.original-x.valor),0);
+  txs.forEach(t=>{const n=Math.max(1,Number(t.parcelas)||1);Object.values(t.descontos||{}).forEach(v=>{eco+=t.valor/n-Number(v);});});
+  if(eco>0.005)h+='<div class="done" style="margin-top:8px">🎉 Você já economizou '+fmt(eco)+' com descontos</div>';
   h+='<div class="acts"><button data-a="disp-card" data-id="'+c.id+'">Atualizar disponível</button><button class="pri" data-a="antecipar" data-id="'+c.id+'">Antecipar parcelas</button></div>';
   if(ants.length)h+='<div class="list" style="margin-top:10px">'+ants.map(a=>'<button class="row" data-a="ver-antecip" data-id="'+c.id+'" data-v="'+a.id+'"><div class="main"><div class="t">Antecipação · '+a.itens.length+' parcela(s)</div><div class="s">'+fmtDataAno(a.data)+' · economizou '+fmt(a.original-a.valor)+'</div></div><div class="v">'+fmt(a.valor)+'</div></button>').join("")+'</div>';
   return h+'</div>';
@@ -1070,6 +1075,7 @@ function drawTx(focus){
   let h='<h3>'+(t.id?"Editar lançamento":"Novo lançamento")+'<button class="x" data-a="close">×</button></h3>'
     +'<div class="seg"><button class="out '+(!ent?"on":"")+'" data-f="tipo" data-v="saida">Saída</button><button class="in '+(ent?"on":"")+'" data-f="tipo" data-v="entrada">Entrada</button></div>'
     +'<input class="inp money money-in" id="fv" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.valStr)+'" autocomplete="off">'
+    +(!ent?descontoHTML(t):'')
     +(!ent?'<label class="f">Juros / multa por atraso (opcional)</label><input class="inp money-in" id="fj" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.jurosStr||"")+'">':'')
     +'<label class="f">'+(ent?"De onde veio":"Onde / com quem")+'</label><input class="inp" id="fd" placeholder="'+(ent?"Ex.: salário, venda…":"Ex.: Shopee, Quero-Quero, Carla…")+'" value="'+esc(t.desc)+'">'
     +'<label class="f">Categoria</label><div class="chips">'+cats.map(([c])=>'<button class="chip '+(t.categoria===c?"on":"")+'" data-f="categoria" data-v="'+esc(c)+'">'+esc(c)+'</button>').join("")
@@ -1101,8 +1107,21 @@ function drawTx(focus){
   updatePreview();
   if(focus&&!t.id)setTimeout(()=>{const e=document.getElementById("fv");e&&e.focus();},50);
 }
+function descontoHTML(t){
+  const ps=expand(Object.assign({},t,{descontos:{},valor:isNaN(txValorTotal())?t.valor||0:txValorTotal()}));
+  if(!ps.length||!(t.valor>0||txValorTotal()>0))return"";
+  const ds=t.descontos||{},hoje=monthOf(todayStr());
+  if(!F.descMes||!ps.some(p=>p.mes===F.descMes))F.descMes=(ps.find(p=>p.mes>=hoje&&ds[p.mes]==null)||ps.find(p=>ds[p.mes]==null)||ps[0]).mes;
+  const lst=ps.filter(p=>ds[p.mes]!=null);
+  return '<label class="f">Valor pago com desconto (opcional)</label>'
+   +(ps.length>1?'<select class="inp" id="fdm" style="margin-bottom:6px">'+ps.map(p=>'<option value="'+p.mes+'"'+(p.mes===F.descMes?' selected':'')+'>Parcela '+p.i+'/'+p.n+' · '+curtoMes(p.mes)+' · '+fmt(p.valor)+(ds[p.mes]!=null?' (já tem desconto)':'')+'</option>').join("")+'</select>':'')
+   +'<input class="inp money-in" id="fdv" inputmode="numeric" placeholder="Quanto você pagou de verdade" value="'+esc(F.descStr||"")+'">'
+   +(lst.length?'<div class="list" style="margin-top:6px">'+lst.map(p=>'<div class="row"><div class="main"><div class="t">'+(p.n>1?'Parcela '+p.i+'/'+p.n+' · ':'')+curtoMes(p.mes)+'</div><div class="s">era '+fmt(p.valor)+' · pagou '+fmt(Number(ds[p.mes]))+' · economizou '+fmt(p.valor-Number(ds[p.mes]))+'</div></div><button class="x" style="font-size:18px" data-a="del-desc" data-v="'+p.mes+'" aria-label="Tirar desconto">×</button></div>').join("")+'</div>':'')
+   +'<div class="hint" style="margin-top:4px">Pagou '+(ps.length>1?'uma parcela':'esta conta')+' adiantado com desconto? Coloque aqui o valor real. Ele substitui o valor '+(ps.length>1?'daquela parcela':'')+' nas suas contas.</div>';
+}
 function readTxInputs(){
   if(!F||F.type!=="tx")return;
+  const fdm=document.getElementById("fdm"),fdv=document.getElementById("fdv");if(fdm)F.descMes=fdm.value;if(fdv)F.descStr=fdv.value;
   const v=document.getElementById("fv"),d=document.getElementById("fd"),p=document.getElementById("fp"),dt=document.getElementById("fdt");
   if(v)F.valStr=v.value; if(d)F.t.desc=d.value; const pg=document.getElementById("fpg"); if(pg)F.pegoStr=pg.value; const fj=document.getElementById("fj"); if(fj)F.jurosStr=fj.value; if(dt&&dt.value)F.t.data=dt.value;
   if(p){const n=parseInt(p.value,10);F.t.parcelas=Math.min(120,Math.max(1,isNaN(n)?1:n));}
@@ -1143,7 +1162,11 @@ async function saveTx(){
   if(isNaN(jv)||jv<0){F.err="Valor de juros inválido.";drawTx();return;}
   const pgv=F.pegoStr&&F.pegoStr.trim()?parseMoney(F.pegoStr):0;
   if(isNaN(pgv)||pgv<0){F.err="Valor que você pegou é inválido.";drawTx();return;}
-  const o={kind:"tx",id:t.id||uid(),juros:jv,parciais:t.parciais||{},antecipadas:t.antecipadas||[],pego:ehEmprestimo(t.metodo==="cartao"?cardById(t.cardId):null)?pgv:0,tipo:t.tipo,valor:tot,desc:(t.desc||"").trim(),categoria:t.categoria,
+  const descontos=Object.assign({},t.descontos||{});
+  if(t.tipo!=="entrada"&&F.descStr&&F.descStr.trim()){const dv=parseMoney(F.descStr);
+    if(isNaN(dv)||dv<0){F.err="Valor pago com desconto inválido.";drawTx();return;}
+    const mesD=F.descMes||expand(Object.assign({},t,{valor:tot,descontos:{}}))[0].mes;descontos[mesD]=dv;}
+  const o={kind:"tx",id:t.id||uid(),juros:jv,parciais:t.parciais||{},antecipadas:t.antecipadas||[],descontos,pego:ehEmprestimo(t.metodo==="cartao"?cardById(t.cardId):null)?pgv:0,tipo:t.tipo,valor:tot,desc:(t.desc||"").trim(),categoria:t.categoria,
     metodo:t.tipo==="entrada"?"entrada":t.metodo,cardId:t.metodo==="cartao"?t.cardId:null,parcelas:t.parcelas||1,jaPagas:(t.parcelas>1?t.jaPagas||0:0),data:t.data,pagas:t.pagas||[]};
   const novo=!t.id;
   closeSheet();
@@ -1270,6 +1293,11 @@ document.addEventListener("click",async ev=>{
     case"pag-":case"pag+":readTxInputs();F.t.jaPagas=Math.min(F.t.parcelas-1,Math.max(0,F.t.jaPagas+(a==="pag+"?1:-1)));drawTx();break;
     case"parc-":case"parc+":readTxInputs();F.t.parcelas=Math.min(120,Math.max(1,F.t.parcelas+(a==="parc+"?1:-1)));drawTx();break;
     case"save-tx":await saveTx();break;
+    case"del-desc":readTxInputs();F.t.descontos=Object.assign({},F.t.descontos||{});delete F.t.descontos[b.dataset.v];drawTx();break;
+    case"save-desc":{const o=S.items.get(F.id),v=parseMoney(document.getElementById("qdv").value);if(!o)break;
+      if(isNaN(v)||v<0){document.getElementById("qerr").innerHTML='<div class="err">Digite o valor que você pagou.</div>';break;}
+      const m=F.m,descontos=Object.assign({},o.descontos||{});descontos[m]=v;closeSheet();
+      await store.set(Object.assign({},o,{descontos,pagas:pago(o,m)?o.pagas:(o.pagas||[]).concat([m])}));toast("Paga com desconto ✓");break;}
     case"del-tx":if(!F.confirmDel){readTxInputs();F.confirmDel=true;drawTx();}else{const i=F.t.id;closeSheet();await store.del(i);toast("Lançamento apagado");}break;
     case"new-fixa":fixaForm();break;
     case"edit-fixa":{const f=S.items.get(id);if(f)fixaForm(f);break;}
