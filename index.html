@@ -13,7 +13,7 @@
   --bg:#f5effc;--card:#ffffff;--ink:#2a1f3a;--muted:#7d6f92;--line:#e7dcf5;
   --accent:#7b4bb7;--accent-soft:#efe5fb;--red:#c0446b;--red-soft:#fbe4ec;--blue:#6a4fb0;--blue-soft:#ece6fa;
   --pos:#7b4bb7;--on-accent:#ffffff;--grad:linear-gradient(135deg,#efe2ff 0%,#fbe3f4 100%);
-  --shadow:0 1px 2px rgba(80,40,140,.06),0 3px 10px rgba(80,40,140,.06);
+  --shadow:0 1px 2px rgba(80,40,140,.06),0 3px 10px rgba(80,40,140,.06);--g1:#9b6bdc;--g2:#e57fc0;--b1:#b98af0;--b2:#f39bd0;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#18121f;--card:#231a2e;--ink:#f0e9fa;--muted:#b0a2c4;--line:#352a44;
@@ -59,7 +59,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0 8px}
 .meta .top{display:flex;align-items:center;gap:10px}
 .meta .emo{font-size:28px;width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;flex:none}
 .meta .bar{height:12px;margin:10px 0 6px}
-.meta .bar i{background:linear-gradient(90deg,#b98af0,#f39bd0)}
+.meta .bar i{background:linear-gradient(90deg,var(--b1),var(--b2))}
 .meta .acts{display:flex;gap:8px;margin-top:10px}
 .meta .acts button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px;font-weight:600}
 .meta .acts button.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
@@ -89,7 +89,7 @@ section h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:va
 .sub .row{padding-left:30px;font-size:14px}
 .bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:5px}
 .bar i{display:block;height:100%;border-radius:99px}
-.fab{position:fixed;right:max(18px,calc(50% - 262px));bottom:84px;width:60px;height:60px;border-radius:50%;border:0;background:linear-gradient(135deg,#9b6bdc,#e57fc0);color:#fff;font-size:32px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:6}
+.fab{position:fixed;right:max(18px,calc(50% - 262px));bottom:84px;width:60px;height:60px;border-radius:50%;border:0;background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff;font-size:32px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:6}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;z-index:6;padding-bottom:env(safe-area-inset-bottom)}
 nav.tabs div{display:flex;max-width:560px;width:100%}
 nav.tabs button{flex:1;border:0;background:none;padding:10px 0 12px;font-size:13px;color:var(--muted)}
@@ -122,6 +122,14 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 .month-card .hd{display:flex;justify-content:space-between;font-weight:650;text-transform:capitalize}
 .month-card .ln{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);margin-top:4px}
 .link{border:0;background:none;color:var(--accent);font-weight:600;font-size:13px;padding:0;text-transform:none;letter-spacing:0}
+.temas{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tema{border:2px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 4px;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:5px}
+.tema.on{border-color:var(--accent);color:var(--accent)}
+.tema i{width:30px;height:30px;border-radius:50%;display:block}
+.busca{display:flex;gap:6px;margin-bottom:8px}
+.busca input{flex:1;background:var(--card)}
+.busca-info{font-size:13px;color:var(--muted);margin:0 0 8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px}
 .toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:99px;font-size:14px;z-index:30}
 </style>
 </head>
@@ -138,7 +146,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="10/nov · cofrinho e juros";
+const VERSAO="11/nov · busca e temas";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -176,8 +184,116 @@ const nomeMes=key=>{const[y,m]=key.split("-").map(Number);return MESES[m-1]+" "+
 const curtoMes=key=>{const[y,m]=key.split("-").map(Number);return MES_C[m-1]+"/"+String(y).slice(2);};
 const fmtData=ds=>{const[,m,d]=ds.split("-");return d+"/"+m;};
 
+// ---------- Temas (cada celular guarda o seu) ----------
+// [nome, cor da bolinha, claro{...}, escuro{...}]
+const TEMAS={
+  lilas:["Lilás","#7b4bb7",
+    {bg:"#f5effc",card:"#ffffff",ink:"#2a1f3a",muted:"#7d6f92",line:"#e7dcf5",accent:"#7b4bb7",soft:"#efe5fb",red:"#c0446b",redSoft:"#fbe4ec",blue:"#6a4fb0",blueSoft:"#ece6fa",grad:"#efe2ff,#fbe3f4",g:"#9b6bdc,#e57fc0",b:"#b98af0,#f39bd0",sh:"80,40,140"},
+    {bg:"#18121f",card:"#231a2e",ink:"#f0e9fa",muted:"#b0a2c4",line:"#352a44",accent:"#c39cf2",soft:"#33264a",red:"#f08aa8",redSoft:"#3e2230",blue:"#c7b2f5",blueSoft:"#2e2545",grad:"#34254d,#3c2541",onAccent:"#1d1228"}],
+  azul:["Azul","#2f6fb5",
+    {bg:"#eef4fb",card:"#ffffff",ink:"#1b2a3a",muted:"#66788c",line:"#d6e3f2",accent:"#2f6fb5",soft:"#e1edfa",red:"#c0392b",redSoft:"#fbe3e0",blue:"#2f6fb5",blueSoft:"#e1edfa",grad:"#dcebfb,#ddf4f2",g:"#4a8fd8,#36b0ad",b:"#6aa6e6,#5cc8c2",sh:"30,70,130"},
+    {bg:"#111820",card:"#1a2430",ink:"#e6eef7",muted:"#9fb0c2",line:"#2a3747",accent:"#7fb4ef",soft:"#1f3247",red:"#f08a80",redSoft:"#3d2222",blue:"#8fbff2",blueSoft:"#1f3247",grad:"#1e3149,#1b3a3a",onAccent:"#0e1a27"}],
+  verde:["Verde","#2f8a5b",
+    {bg:"#eff7f1",card:"#ffffff",ink:"#1c2e23",muted:"#688070",line:"#d3e8da",accent:"#2f8a5b",soft:"#def1e5",red:"#c0392b",redSoft:"#fbe3e0",blue:"#2f7a6a",blueSoft:"#dcefe9",grad:"#dff3e6,#eef5d6",g:"#3fa36b,#8fbf3a",b:"#62bb87,#b0d66a",sh:"30,90,50"},
+    {bg:"#111a15",card:"#1a261f",ink:"#e5f2ea",muted:"#9fb8a8",line:"#2a3b31",accent:"#7fd0a0",soft:"#1f3a2a",red:"#f08a80",redSoft:"#3d2222",blue:"#8fd6c4",blueSoft:"#1f3a33",grad:"#1f3a2a,#2b3a1c",onAccent:"#0e1d14"}],
+  rosa:["Rosa","#c2407f",
+    {bg:"#fdf0f6",card:"#ffffff",ink:"#3a1c2b",muted:"#8f6a7c",line:"#f2d6e3",accent:"#c2407f",soft:"#fadbe9",red:"#c0392b",redSoft:"#fbe3e0",blue:"#a04a8a",blueSoft:"#f6e0f0",grad:"#ffe0ee,#efe2ff",g:"#e45d9b,#b06ae0",b:"#f08bbb,#c79af0",sh:"140,40,90"},
+    {bg:"#1e1218",card:"#2b1a23",ink:"#fae9f1",muted:"#c4a2b3",line:"#442a37",accent:"#f29cc6",soft:"#4a2639",red:"#f08a80",redSoft:"#3d2222",blue:"#e8a8d8",blueSoft:"#45253f",grad:"#4d2539,#3a254d",onAccent:"#28121d"}],
+  laranja:["Pôr do sol","#c4622d",
+    {bg:"#fdf3ec",card:"#ffffff",ink:"#3a2418",muted:"#8f7262",line:"#f0dccd",accent:"#c4622d",soft:"#fbe5d6",red:"#b8323a",redSoft:"#fbe0e2",blue:"#a8602e",blueSoft:"#fbe8da",grad:"#ffe6d3,#ffe0e6",g:"#f08a3c,#e8557a",b:"#f5a76a,#f08aa0",sh:"130,70,30"},
+    {bg:"#1d1510",card:"#2a1f18",ink:"#f9ece3",muted:"#c4a898",line:"#433226",accent:"#f2a172",soft:"#4a2e1f",red:"#f08a90",redSoft:"#3d2224",blue:"#f2b98c",blueSoft:"#43301f",grad:"#4a2e1f,#4a2230",onAccent:"#2a1609"}],
+  grafite:["Grafite","#3d4a5c",
+    {bg:"#f2f3f5",card:"#ffffff",ink:"#1e2329",muted:"#6b727c",line:"#dde0e5",accent:"#3d4a5c",soft:"#e3e6eb",red:"#c0392b",redSoft:"#fbe3e0",blue:"#3d5a80",blueSoft:"#e2e8f0",grad:"#e6e9ee,#eef0f3",g:"#4b5a70,#6f8299",b:"#7d8ba0,#a3b0c2",sh:"20,30,45"},
+    {bg:"#121417",card:"#1c1f24",ink:"#eceef1",muted:"#a3a9b2",line:"#2e333a",accent:"#b9c4d4",soft:"#2b3038",red:"#f08a80",redSoft:"#3d2222",blue:"#a9bdd8",blueSoft:"#263040",grad:"#262b33,#2d3138",onAccent:"#14171b"}]
+};
+const KEY_TEMA="financas-tema";
+function temaAtual(){let t={};try{t=JSON.parse(localStorage.getItem(KEY_TEMA)||"{}")||{};}catch(e){}return{cor:TEMAS[t.cor]?t.cor:"lilas",modo:["auto","claro","escuro"].includes(t.modo)?t.modo:"auto"};}
+function varsTema(v,claro){
+  const [g1,g2]=(v.g||claro.g).split(","),[b1,b2]=(v.b||claro.b).split(","),[r1,r2]=v.grad.split(",");
+  return "--bg:"+v.bg+";--card:"+v.card+";--ink:"+v.ink+";--muted:"+v.muted+";--line:"+v.line+";--accent:"+v.accent+";--accent-soft:"+v.soft
+    +";--red:"+v.red+";--red-soft:"+v.redSoft+";--blue:"+v.blue+";--blue-soft:"+v.blueSoft+";--pos:"+v.accent+";--on-accent:"+(v.onAccent||"#ffffff")
+    +";--grad:linear-gradient(135deg,"+r1+" 0%,"+r2+" 100%);--g1:"+g1+";--g2:"+g2+";--b1:"+b1+";--b2:"+b2
+    +";--shadow:"+(v.sh?"0 1px 2px rgba("+v.sh+",.06),0 3px 10px rgba("+v.sh+",.06)":"none")+";";
+}
+function aplicarTema(){
+  const t=temaAtual(),[,,claro,escuro]=TEMAS[t.cor];
+  let css=":root{"+varsTema(claro,claro)+"color-scheme:light}";
+  if(t.modo==="escuro")css=":root{"+varsTema(escuro,claro)+"color-scheme:dark}";
+  else if(t.modo==="auto")css+="@media (prefers-color-scheme:dark){:root{"+varsTema(escuro,claro)+"color-scheme:dark}}";
+  let el=document.getElementById("tema-css");
+  if(!el){el=document.createElement("style");el.id="tema-css";document.head.appendChild(el);}
+  el.textContent=css;
+  const escuroAgora=t.modo==="escuro"||(t.modo==="auto"&&window.matchMedia&&matchMedia("(prefers-color-scheme:dark)").matches);
+  const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=escuroAgora?escuro.bg:claro.accent;
+}
+function salvarTema(mud){const t=Object.assign(temaAtual(),mud);try{localStorage.setItem(KEY_TEMA,JSON.stringify(t));}catch(e){}aplicarTema();}
+aplicarTema();
+try{matchMedia("(prefers-color-scheme:dark)").addEventListener("change",aplicarTema);}catch(e){}
+function temasHTML(){
+  const t=temaAtual();
+  return '<label class="f" style="margin-top:16px">Tema do app (só neste celular)</label>'
+   +'<div class="temas">'+Object.entries(TEMAS).map(([k,[nome,cor]])=>'<button class="tema '+(t.cor===k?"on":"")+'" data-a="tema" data-v="'+k+'"><i style="background:'+cor+'"></i>'+nome+(t.cor===k?' ✓':'')+'</button>').join("")+'</div>'
+   +'<div class="seg" style="margin:8px 0 0">'+[["auto","Automático"],["claro","☀️ Claro"],["escuro","🌙 Escuro"]].map(([k,l])=>'<button class="'+(t.modo===k?"on":"")+'" data-a="tema-modo" data-v="'+k+'">'+l+'</button>').join("")+'</div>'
+   +'<p style="font-size:12px;color:var(--muted);margin:6px 0 0">Automático segue o modo claro/escuro do celular.</p>';
+}
+
+// ---------- Busca nos lançamentos ----------
+const norm=s=>String(s??"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const fmtDataAno=ds=>{const[y,m,d]=ds.split("-");return d+"/"+m+"/"+y.slice(2);};
+function marca(txt,q){ // destaca o termo buscado
+  txt=String(txt??"");if(!q)return esc(txt);
+  const n=norm(txt),i=n.indexOf(q);
+  if(i<0||n.length!==txt.length)return esc(txt);
+  return esc(txt.slice(0,i))+'<mark>'+esc(txt.slice(i,i+q.length))+'</mark>'+esc(txt.slice(i+q.length));
+}
+function buscaHTML(){
+  const q=norm(S.busca.trim()),mes=S.month,todos=S.buscaTodos;
+  const bate=(...campos)=>q.split(/\s+/).every(p=>campos.some(c=>norm(c).includes(p)));
+  const res=[];
+  all("tx").forEach(t=>{
+    const ent=t.tipo==="entrada",card=t.metodo==="cartao"?cardById(t.cardId):null;
+    const met=ent?"entrada":card?"cartão "+card.nome:(METODOS.find(m=>m[0]===t.metodo)||["","Outro"])[1];
+    if(!bate(t.desc,t.categoria,met,moneyStr(t.valor)))return;
+    let valor=t.valor+(Number(t.juros)||0),info="";
+    if(!todos){
+      const ps=expand(t).filter(p=>p.mes===mes);
+      if(!ps.length)return;
+      valor=ps.reduce((a,p)=>a+p.valor+jurosTx(p),0);
+      if(ps[0].n>1)info='<span class="badge">'+ps[0].i+'/'+ps[0].n+'</span>';
+    }else if((Number(t.parcelas)||1)>1)info='<span class="badge">'+t.parcelas+'x</span>';
+    res.push({data:t.data,ent,valor,html:'<button class="row" data-a="edit-tx" data-id="'+t.id+'"><span class="dot" style="background:'+catColor(t.categoria,ent)+'"></span><div class="main"><div class="t">'+marca(t.desc||t.categoria,q)+info+'</div><div class="s">'+fmtDataAno(t.data)+' · '+marca(t.categoria,q)+' · '+esc(met)+(t.juros&&!ent?' · <span class="neg">juros '+fmt(Number(t.juros))+'</span>':'')+'</div></div><div class="v '+(ent?"pos":"")+'">'+(ent?"+":"")+fmt(valor)+'</div></button>'});
+  });
+  all("meta").forEach(m=>(m.depositos||[]).forEach(d=>{
+    if(!todos&&monthOf(d.data)!==mes)return;
+    if(!bate("Cofrinho "+m.nome,d.nota,moneyStr(Math.abs(d.valor))))return;
+    const g=d.valor>=0;
+    res.push({data:d.data,ent:!g,valor:Math.abs(d.valor),html:'<button class="row" data-a="edit-meta" data-id="'+m.id+'"><span style="font-size:18px;width:26px;text-align:center">'+esc(m.emoji||"🐷")+'</span><div class="main"><div class="t">Cofrinho · '+marca(m.nome,q)+'</div><div class="s">'+fmtDataAno(d.data)+' · '+(g?"guardei":"retirei")+(d.nota?' · '+marca(d.nota,q):'')+'</div></div><div class="v '+(g?"":"pos")+'">'+(g?"":"+")+fmt(Math.abs(d.valor))+'</div></button>'});
+  }));
+  const fixas=all("fixa").filter(f=>(todos||fixaAtiva(f,mes))&&bate(f.desc,f.categoria,"conta fixa",moneyStr(f.valor)));
+  res.sort((a,b)=>b.data.localeCompare(a.data));
+  const saiu=res.filter(x=>!x.ent).reduce((a,x)=>a+x.valor,0),entrou=res.filter(x=>x.ent).reduce((a,x)=>a+x.valor,0);
+  let h='<div class="busca-info"><span>'+(res.length+fixas.length)+' resultado(s) '+(todos?"em todos os meses":"em "+nomeMes(mes))+'</span><span>'
+    +(saiu?'saídas <b class="neg">'+fmt(saiu)+'</b>':'')+(saiu&&entrou?' · ':'')+(entrou?'entradas <b class="pos">'+fmt(entrou)+'</b>':'')+'</span></div><div class="list">';
+  if(!res.length&&!fixas.length)h+='<div class="empty">Nada encontrado para "'+esc(S.busca.trim())+'".'+(todos?'':' Tente buscar em todos os meses.')+'</div>';
+  fixas.forEach(f=>{const ent=f.tipo==="entrada";
+    h+='<button class="row" data-a="edit-fixa" data-id="'+f.id+'"><span style="font-size:16px;width:26px;text-align:center">🔁</span><div class="main"><div class="t">'+marca(f.desc,q)+'</div><div class="s">conta fixa · dia '+(f.dia||"–")+' · '+marca(f.categoria,q)+'</div></div><div class="v '+(ent?"pos":"")+'">'+(ent?"+":"")+fmt(todos?f.valor:fixaValor(f,mes))+'<div class="s" style="text-align:right">por mês</div></div></button>';});
+  const lim=150;
+  h+=res.slice(0,lim).map(x=>x.html).join("");
+  if(res.length>lim)h+='<div class="empty">Mostrando os '+lim+' mais recentes. Digite mais letras para afinar a busca.</div>';
+  h+='</div>';
+  if(todos&&res.some(x=>/badge">\d+x</.test(x.html)))h+='<p style="font-size:12px;color:var(--muted);margin:6px 2px 0">Compras parceladas aparecem com o valor total.</p>';
+  return h;
+}
+function buscaAtualiza(){
+  const a=document.getElementById("lanc-area");if(!a)return;
+  a.innerHTML=S.busca.trim()?buscaHTML():lancMesHTML(calcMes(S.month));
+  const c=document.getElementById("busca-limpar");if(c)c.style.display=S.busca?"":"none";
+  const e=document.getElementById("busca-esc");if(e)e.style.display=S.busca.trim()?"":"none";
+  document.querySelectorAll("[data-a=busca-escopo]").forEach(b=>b.classList.toggle("on",(b.dataset.v==="todos")===S.buscaTodos));
+}
+
 // ---------- Estado ----------
-const S={items:new Map(),month:monthOf(todayStr()),tab:"mes",open:{},loaded:false,mode:"init",note:""};
+const S={items:new Map(),month:monthOf(todayStr()),tab:"mes",open:{},loaded:false,mode:"init",note:"",busca:"",buscaTodos:true};
 let store=null; // {set(obj), del(id)}
 
 const all=kind=>[...S.items.values()].filter(o=>o.kind===kind);
@@ -460,9 +576,20 @@ function viewMes(){
     h+='</div></section>';
   }
 
-  // Lançamentos (fora do cartão)
+  // Lançamentos (fora do cartão) + busca
+  const temBusca=!!S.busca.trim();
+  h+='<section><h2>Lançamentos</h2>'
+    +'<div class="busca"><input class="inp" id="busca" type="search" enterkeyhint="search" autocomplete="off" placeholder="🔍 Buscar por nome, categoria ou valor" value="'+esc(S.busca)+'"><button class="btn small" id="busca-limpar" data-a="busca-limpar" style="background:var(--accent-soft);color:var(--accent);'+(S.busca?'':'display:none')+'">Limpar</button></div>'
+    +'<div class="chips" id="busca-esc" style="margin-bottom:8px;'+(temBusca?'':'display:none')+'"><button class="chip '+(S.buscaTodos?"on":"")+'" data-a="busca-escopo" data-v="todos">Todos os meses</button><button class="chip '+(S.buscaTodos?"":"on")+'" data-a="busca-escopo" data-v="mes">Só '+nomeMes(mes)+'</button></div>'
+    +'<div id="lanc-area">'+(temBusca?buscaHTML():lancMesHTML(r))+'</div></section>';
+
+  // Por categoria
+  h+=porCatHTML(r);
+  return h;
+}
+function lancMesHTML(r){
   const ls=r.parcelas.filter(p=>!p.card||p.tx.tipo==="entrada").sort((a,b)=>b.tx.data.localeCompare(a.tx.data));
-  h+='<section><h2>Lançamentos</h2><div class="list">';
+  let h='<div class="list">';
   if(!ls.length&&!r.cofre.length)h+='<div class="empty">Nada lançado neste mês fora do cartão. Toque no + para adicionar.</div>';
   ls.forEach(p=>{
     const t=p.tx, ent=t.tipo==="entrada", bol=COM_BAIXA(t.metodo)&&!ent, pago=bol&&(t.pagas||[]).includes(S.month);
@@ -476,11 +603,12 @@ function viewMes(){
     const g=d.valor>=0;
     h+='<button class="row" data-a="edit-meta" data-id="'+m.id+'"><span style="font-size:18px;width:26px;text-align:center">'+esc(m.emoji||"🐷")+'</span><div class="main"><div class="t">Cofrinho · '+esc(m.nome)+'</div><div class="s">'+fmtData(d.data)+' · '+(g?"guardei":"retirei")+(d.nota?' · '+esc(d.nota):'')+'</div></div><div class="v '+(g?"":"pos")+'">'+(g?"":"+")+fmt(Math.abs(d.valor))+'</div></button>';
   });
-  h+='</div></section>';
-
-  // Por categoria
+  h+='</div>';
+  return h;
+}
+function porCatHTML(r){
   const cats=Object.entries(r.porCat).sort((a,b)=>b[1]-a[1]);
-  h+='<section><h2>Para onde foi o dinheiro</h2><div class="list">';
+  let h='<section><h2>Para onde foi o dinheiro</h2><div class="list">';
   if(!cats.length)h+='<div class="empty">Sem saídas neste mês.</div>';
   const max=cats.length?cats[0][1]:1;
   cats.forEach(([c,v])=>{
@@ -634,7 +762,7 @@ function viewCartoes(){
     let lim='';
     if(c.limite>0){const u=limiteUsado(c),d=c.limite-u,pct=Math.min(100,Math.max(0,u/c.limite*100));
       lim='<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:14px"><span>Disponível</span><b class="'+(d<0?"neg":"pos")+'">'+fmt(d)+'</b></div>'
-        +'<div class="bar"><i style="width:'+pct+'%;background:'+(pct>=90?"var(--red)":"linear-gradient(90deg,#b98af0,#f39bd0)")+'"></i></div>'
+        +'<div class="bar"><i style="width:'+pct+'%;background:'+(pct>=90?"var(--red)":"linear-gradient(90deg,var(--b1),var(--b2))")+'"></i></div>'
         +'<div class="s">Usado '+fmt(u)+' de '+fmt(c.limite)+(d<0?' · <span class="neg">passou do limite</span>':pct>=90?' · <span class="neg">quase no limite</span>':'')+'</div>';}
     else lim='<div class="s" style="margin-top:4px">Toque para informar o limite</div>';
     h+='<button class="row" data-a="edit-card" data-id="'+c.id+'" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">💳</span><div class="main"><div class="t">'+esc(c.nome)+'</div><div class="s">fecha dia '+c.fechamento+' · vence dia '+c.vencimento+'</div></div><span class="s">editar</span></div>'+lim+'</button>';
@@ -870,6 +998,11 @@ document.addEventListener("click",async ev=>{
     case"dep-meta":case"ret-meta":{const m=S.items.get(id);if(m)depForm(m,a==="dep-meta"?1:-1);break;}
     case"save-dep":await saveDep();break;
     case"backup-menu":backupMenu();break;
+    case"tema":case"tema-modo":{const sh=document.querySelector(".sheet"),y=sh?sh.scrollTop:0;
+      salvarTema(a==="tema"?{cor:b.dataset.v}:{modo:b.dataset.v});render();backupMenu();
+      const sh2=document.querySelector(".sheet");if(sh2)sh2.scrollTop=y;break;}
+    case"busca-limpar":S.busca="";{const e=document.getElementById("busca");if(e){e.value="";e.focus();}}buscaAtualiza();break;
+    case"busca-escopo":S.buscaTodos=b.dataset.v==="todos";buscaAtualiza();break;
     case"cats-menu":catsForm(b.dataset.v);break;
     case"add-cat":{const e=await addCat(document.getElementById("cnew").value,F.tipo);F.err=e;drawCats();if(!e)toast("Categoria criada");break;}
     case"del-cat":{const nome=b.dataset.v,tipo=F.tipo,list=getCats(tipo);
@@ -903,10 +1036,13 @@ document.addEventListener("click",async ev=>{
 });
 document.getElementById("fab").addEventListener("click",()=>txForm());
 document.addEventListener("input",ev=>{
+  if(ev.target.id==="busca"){S.busca=ev.target.value;buscaAtualiza();return;}
   if(!F||F.type!=="tx")return;
   if(["fv","fp","fdt","fjp"].includes(ev.target.id)){readTxInputs();updatePreview();}
 });
 document.addEventListener("keydown",ev=>{
+  if(ev.target.id==="busca"&&ev.key==="Enter"){ev.preventDefault();ev.target.blur();return;}
+  if(ev.target.id==="busca"&&ev.key==="Escape"&&!F){S.busca="";ev.target.value="";buscaAtualiza();return;}
   if(ev.key==="Escape"&&F)closeSheet();
   if(ev.key==="Enter"&&F&&ev.target.tagName==="INPUT"){ev.preventDefault();
     if(F.type==="tx"&&ev.target.id==="fnc"){const b=document.querySelector('[data-a="add-cat-inline"]');b&&b.click();}
@@ -945,6 +1081,7 @@ function backupMenu(){
    +'<button class="btn" data-a="save-cfg" style="margin-top:10px">Salvar ajustes</button>'
    +'<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;color:var(--accent)" href="'+agendaLink()+'" target="_blank" rel="noopener">📅 Criar lembrete no Google Agenda</a>'
    +'<p style="font-size:13px;color:var(--muted);margin:6px 0 0">Salve os ajustes antes. Abre o Google Agenda com o lembrete pronto: confira se está na sua conta pessoal e toque em Salvar. A notificação chega mesmo com o app fechado.</p>'
+   +temasHTML()
    +'<button class="btn ghost" style="color:var(--ink)" data-a="cats-menu" data-v="saida">🏷️ Gerenciar categorias</button>'
    +'<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px">Versão do app: <b>'+VERSAO+'</b></div>'
    +'<h3 style="margin-top:22px">Backup dos seus dados</h3>'
