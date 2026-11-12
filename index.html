@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="12/nov · vencimento do empréstimo";
+const VERSAO="12/nov · empréstimos agrupados";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -452,8 +452,13 @@ function pendentes(P){
   r.fixas.forEach(x=>{const f=x.f;if(f.tipo==="entrada"||fixaNoCartao(f)||f.metodo==="pai"||pago(f,x.m))return;
     it.push({t:"fixa",o:f,m:x.m,nome:f.desc,total:x.v+x.j,dia:f.dia});});
   r.faturas.filter(f=>!f.paga&&f.total>0).forEach(f=>it.push({t:"fat",o:f.card,m:f.m,nome:(ehEmprestimo(f.card)?"Parcela ":"Fatura ")+f.card.nome,total:f.total,dia:f.card.vencimento}));
-  r.parcelas.filter(p=>baixaP(p)&&!pago(p.tx,p.mes)).forEach(p=>it.push({t:"bol",o:p.tx,m:p.mes,nome:(empP(p)&&!norm(p.tx.desc).includes(norm(p.card.nome))?p.card.nome+" · ":"")+(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),total:p.valor+jurosTx(p),dia:diaVencP(p)}));
+  const grp={};
+  r.parcelas.filter(p=>empP(p)&&!pago(p.tx,p.mes)).forEach(p=>{const g=grp[p.card.id]=grp[p.card.id]||{t:"emp",o:p.card,m:P,nome:p.card.nome,itens:[]};g.itens.push(p);});
+  r.parcelas.filter(p=>baixaP(p)&&!empP(p)&&!pago(p.tx,p.mes)).forEach(p=>it.push({t:"bol",o:p.tx,m:p.mes,nome:(empP(p)&&!norm(p.tx.desc).includes(norm(p.card.nome))?p.card.nome+" · ":"")+(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),total:p.valor+jurosTx(p),dia:diaVencP(p)}));
   it.forEach(x=>{x.parte=pagoParte(x.o,x.m);x.v=resta(x.o,x.m,x.total);x.venc=dataDe(x.m,x.dia);});
+  Object.values(grp).forEach(g=>{g.itens.sort((a,b)=>vencP(a).localeCompare(vencP(b)));g.total=g.itens.reduce((a,p)=>a+p.valor+jurosTx(p),0);
+    g.v=Math.round(g.itens.reduce((a,p)=>a+resta(p.tx,p.mes,p.valor+jurosTx(p)),0)*100)/100;g.parte=Math.round((g.total-g.v)*100)/100;
+    g.venc=vencP(g.itens[0]);g.k=g.itens.map(p=>p.tx.id+"|"+p.mes).join(",");it.push(g);});
   return it.sort((a,b)=>a.venc.localeCompare(b.venc));
 }
 function atrasadas(P){
@@ -464,6 +469,9 @@ function atrasadas(P){
 const PAY_A={fixa:"pay-fixa",fat:"pay-fat",bol:"pay-bol"};
 function itemLi(x){
   const late=x.venc<todayStr();
+  if(x.t==="emp")return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="pay-emp" data-k="'+x.k+'" aria-label="Marcar parcelas de '+esc(x.nome)+' como pagas"></button>'
+    +'<button data-a="emp-grupo" data-k="'+x.k+'" data-id="'+x.o.id+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">💸 '+esc(x.nome)+' <span class="badge">'+x.itens.length+' parcela'+(x.itens.length>1?'s':'')+'</span>'
+    +'<span style="display:block;font-size:12px;color:'+(late?"var(--red)":"var(--muted)")+'">'+(x.itens.length>1?'1ª vence ':'vence ')+fmtData(x.venc)+(x.parte>0.005?' · pago '+fmt(x.parte)+' de '+fmt(x.total):'')+' · toque para ver</span></button><span>'+fmt(x.v)+'</span></li>';
   return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="'+PAY_A[x.t]+'" data-id="'+x.o.id+'" data-m="'+x.m+'" aria-label="Marcar '+esc(x.nome)+' como pago"></button>'
     +'<button data-a="pagar-parte" data-t="'+x.t+'" data-id="'+x.o.id+'" data-m="'+x.m+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">'+esc(x.nome)
     +'<span style="display:block;font-size:12px;color:'+(late?"var(--red)":"var(--muted)")+'">vence '+fmtData(x.venc)+(x.parte?' · pago '+fmt(x.parte)+' de '+fmt(x.total):'')+'</span></button><span>'+fmt(x.v)+'</span></li>';
@@ -502,9 +510,28 @@ function payCard(P){
 }
 async function pagarTudo(){
   const P=S.month,lista=pendentes(P).concat(atrasadas(P)),pv=paiAPagar(P);
-  for(const x of lista){const o=S.items.get(x.o.id);if(o&&!pago(o,x.m))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([x.m])}));}
+  for(const x of lista){
+    if(x.t==="emp"){for(const p of x.itens){const o=S.items.get(p.tx.id);if(o&&!pago(o,p.mes))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([p.mes])}));}continue;}
+    const o=S.items.get(x.o.id);if(o&&!pago(o,x.m))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([x.m])}));}
   if(pv>0)await addRepasse(pv,P===perHoje()?todayStr():dataDe(P,diaIni()),"acerto");
   S.confirmPagar=false;render();toast("Tudo pago! 🦄");
+}
+
+// ---------- Grupo de parcelas de empréstimo ----------
+function keysParc(k){return (k||"").split(",").filter(Boolean).map(x=>{const[id,mes]=x.split("|");const t=S.items.get(id);return t?expand(t).find(p=>p.mes===mes):null;}).filter(Boolean);}
+function empGrupo(cid,k){
+  const c=S.items.get(cid),ps=keysParc(k);if(!c||!ps.length)return closeSheet();
+  F={type:"empgrupo",id:cid,k};
+  const tot=ps.reduce((a,p)=>a+p.valor+jurosTx(p),0),falta=ps.reduce((a,p)=>a+(pago(p.tx,p.mes)?0:resta(p.tx,p.mes,p.valor+jurosTx(p))),0);
+  openSheet('<h3>💸 '+esc(c.nome)+'<button class="x" data-a="close">×</button></h3>'
+   +'<div class="tiles" style="margin:0 0 6px;grid-template-columns:1fr 1fr"><div class="tile"><small>Parcelas</small><b>'+fmt(tot)+'</b></div><div class="tile"><small>Falta pagar</small><b class="'+(falta>0.005?"neg":"pos")+'">'+fmt(falta)+'</b></div></div>'
+   +'<div class="list">'+ps.map(p=>{const pg=pago(p.tx,p.mes),parte=pg?0:pagoParte(p.tx,p.mes);
+     return '<div class="row '+(pg?"paid":"")+'"><button class="check '+(pg?"on":"")+'" data-a="pay-bol" data-id="'+p.tx.id+'" data-m="'+p.mes+'" data-grupo="1" aria-label="Marcar parcela paga">'+(pg?"✓":"")+'</button>'
+      +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="pagar-parte" data-t="bol" data-id="'+p.tx.id+'" data-m="'+p.mes+'"><div class="t">'+esc(p.tx.desc||p.tx.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">vence '+fmtData(vencP(p))+(parte?' · pago '+fmt(parte):'')+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></button>'
+      +'<div class="v">'+fmt(p.valor+jurosTx(p))+'</div></div>';}).join("")+'</div>'
+   +'<p style="font-size:13px;color:var(--muted);margin:8px 0 0">Toque no quadradinho para dar baixa em cada parcela, ou no nome para pagamento parcial ou com desconto.</p>'
+   +(falta>0.005?'<button class="btn" data-a="pay-emp" data-k="'+esc(k)+'" data-fecha="1">✓ Paguei todas</button>':'')
+   +'<button class="btn ghost" style="color:var(--ink)" data-a="close">Fechar</button>');
 }
 
 // ---------- Pagamento parcial ----------
@@ -738,6 +765,26 @@ function viewMes(){
     h+='</div></section>';
   }
 
+  // Empréstimos (parcelas agrupadas por empréstimo, cada uma com seu vencimento)
+  const eg={};r.parcelas.filter(empP).forEach(p=>{(eg[p.card.id]=eg[p.card.id]||{c:p.card,ps:[]}).ps.push(p);});
+  if(Object.keys(eg).length){
+    h+='<section><h2>Empréstimos</h2><div class="list">';
+    Object.values(eg).forEach(({c,ps})=>{
+      ps.sort((a,b)=>vencP(a).localeCompare(vencP(b)));
+      const k="emp-"+c.id+"-"+mes,open=!!S.open[k],todas=ps.every(p=>pago(p.tx,p.mes)),abertas=ps.filter(p=>!pago(p.tx,p.mes));
+      const tot=ps.reduce((a,p)=>a+p.valor+jurosTx(p),0),falta=abertas.reduce((a,p)=>a+resta(p.tx,p.mes,p.valor+jurosTx(p)),0);
+      const keys=(todas?ps:abertas).map(p=>p.tx.id+"|"+p.mes).join(",");
+      h+='<div class="row '+(todas?"paid":"")+'"><button class="check '+(todas?"on":"")+'" data-a="pay-emp" data-k="'+keys+'"'+(todas?' data-desfaz="1"':'')+' aria-label="Marcar parcelas pagas">'+(todas?"✓":"")+'</button>'
+        +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="toggle" data-k="'+k+'"><div class="t">💸 '+esc(c.nome)+' '+(open?"▾":"▸")+'</div><div class="s">'+ps.length+' parcela(s) · '+(todas?'todas pagas':(ps.length-abertas.length)+' paga(s), falta '+fmt(falta)+' · próxima vence '+fmtData(vencP(abertas[0])))+'</div></button>'
+        +'<div class="v">'+fmt(tot)+'</div></div>';
+      if(open)h+='<div class="sub">'+ps.map(p=>{const pg=pago(p.tx,p.mes),parte=pg?0:pagoParte(p.tx,p.mes);
+        return '<div class="row '+(pg?"paid":"")+'"><button class="check '+(pg?"on":"")+'" data-a="pay-bol" data-id="'+p.tx.id+'" data-m="'+p.mes+'" aria-label="Marcar parcela paga">'+(pg?"✓":"")+'</button>'
+          +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="edit-tx" data-id="'+p.tx.id+'"><div class="t">'+esc(p.tx.desc||p.tx.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">vence '+fmtData(vencP(p))+(parte?' · pago '+fmt(parte):'')+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></button>'
+          +'<div class="v">'+fmt(p.valor+jurosTx(p))+'</div></div>';}).join("")+'</div>';
+    });
+    h+='</div></section>';
+  }
+
   h+=paiSecao(mes,r);
 
   // Lançamentos (fora do cartão) + busca
@@ -752,7 +799,7 @@ function viewMes(){
 }
 function lancMesHTML(r){
   const quando=p=>(p.n>1||empP(p))?vencP(p):p.tx.data;
-  const ls=r.parcelas.filter(p=>!p.card||p.tx.tipo==="entrada"||empP(p)).sort((a,b)=>quando(b).localeCompare(quando(a)));
+  const ls=r.parcelas.filter(p=>!p.card||p.tx.tipo==="entrada").sort((a,b)=>quando(b).localeCompare(quando(a)));
   let h='<div class="list">';
   if(!ls.length&&!r.cofre.length&&!r.antecip.length)h+='<div class="empty">Nada lançado '+(modoPeriodo()?"neste período":"neste mês")+' fora do cartão. Toque no + para adicionar.</div>';
   ls.forEach(p=>{
@@ -1326,7 +1373,8 @@ document.addEventListener("click",async ev=>{
       closeSheet();await store.set(Object.assign({},f,{valores,juros}));break;}
     case"pay-fixa":{if(b.dataset.fecha)closeSheet();const M=b.dataset.m||S.month,f=S.items.get(id);if(f){const ja=(f.pagas||[]).includes(M);await store.set(Object.assign({},f,{pagas:toggleIn(f.pagas,M)}));if(!ja)toast(f.desc+" pago ✓");}break;}
     case"pay-fat":{if(b.dataset.fecha)closeSheet();const M=b.dataset.m||S.month,c=S.items.get(id);if(c){const ja=(c.pagas||[]).includes(M);await store.set(Object.assign({},c,{pagas:toggleIn(c.pagas,M)}));if(!ja)toast("Fatura "+c.nome+" paga ✓");}break;}
-    case"pay-bol":{if(b.dataset.fecha)closeSheet();const M=b.dataset.m||S.month,t=S.items.get(id);if(t)await store.set(Object.assign({},t,{pagas:toggleIn(t.pagas,M)}));break;}
+    case"pay-bol":{if(b.dataset.fecha)closeSheet();const M=b.dataset.m||S.month,t=S.items.get(id),g=b.dataset.grupo&&F&&F.type==="empgrupo"?{id:F.id,k:F.k}:null;
+      if(t)await store.set(Object.assign({},t,{pagas:toggleIn(t.pagas,M)}));if(g)empGrupo(g.id,g.k);break;}
     case"new-meta":metaForm();break;
     case"edit-meta":{const m=S.items.get(id);if(m)metaForm(m);break;}
     case"save-meta":await saveMeta();break;
@@ -1340,6 +1388,12 @@ document.addEventListener("click",async ev=>{
       S.month=perHoje();render();backupMenu();const sh2=document.querySelector(".sheet");if(sh2)sh2.scrollTop=y;
       toast(b.dataset.v==="periodo"?"Agora a tela mostra por período":"Agora a tela mostra por mês");break;}
     case"pagar-parte":parteForm(b.dataset.t,id,b.dataset.m);break;
+    case"emp-grupo":empGrupo(id,b.dataset.k);break;
+    case"pay-emp":{const ps=keysParc(b.dataset.k),desf=!!b.dataset.desfaz;if(b.dataset.fecha)closeSheet();
+      for(const p of ps){const o=S.items.get(p.tx.id);if(!o)continue;const tem=pago(o,p.mes);
+        if(desf&&tem)await store.set(Object.assign({},o,{pagas:(o.pagas||[]).filter(m=>m!==p.mes)}));
+        else if(!desf&&!tem)await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([p.mes])}));}
+      if(!desf&&ps.length)toast(ps.length+" parcela(s) paga(s) ✓");break;}
     case"save-parte":await saveParte();break;
     case"del-parte":{const o=S.items.get(F.id);if(!o)break;const parciais=Object.assign({},o.parciais||{});parciais[F.m]=(parciais[F.m]||[]).filter(x=>x.id!==id);if(!parciais[F.m].length)delete parciais[F.m];
       const {t,id:oid,m}=F;await store.set(Object.assign({},o,{parciais}));parteForm(t,oid,m);break;}
