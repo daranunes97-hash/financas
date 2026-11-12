@@ -126,6 +126,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-w
 .tema{border:2px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 4px;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:5px}
 .tema.on{border-color:var(--accent);color:var(--accent)}
 .tema i{width:30px;height:30px;border-radius:50%;display:block}
+.tema .mini{width:56px;height:56px;display:block}.tema .mini svg{width:100%;height:100%;overflow:visible}.tema .mini .bob{animation:none}
 .busca{display:flex;gap:6px;margin-bottom:8px}
 .busca input{flex:1;background:var(--card)}
 .busca-info{font-size:13px;color:var(--muted);margin:0 0 8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -146,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="11/nov · busca e temas";
+const VERSAO="11/nov · personagens";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -207,7 +208,7 @@ const TEMAS={
     {bg:"#121417",card:"#1c1f24",ink:"#eceef1",muted:"#a3a9b2",line:"#2e333a",accent:"#b9c4d4",soft:"#2b3038",red:"#f08a80",redSoft:"#3d2222",blue:"#a9bdd8",blueSoft:"#263040",grad:"#262b33,#2d3138",onAccent:"#14171b"}]
 };
 const KEY_TEMA="financas-tema";
-function temaAtual(){let t={};try{t=JSON.parse(localStorage.getItem(KEY_TEMA)||"{}")||{};}catch(e){}return{cor:TEMAS[t.cor]?t.cor:"lilas",modo:["auto","claro","escuro"].includes(t.modo)?t.modo:"auto"};}
+function temaAtual(){let t={};try{t=JSON.parse(localStorage.getItem(KEY_TEMA)||"{}")||{};}catch(e){}return{cor:TEMAS[t.cor]?t.cor:"lilas",modo:["auto","claro","escuro"].includes(t.modo)?t.modo:"auto",bicho:t.bicho||"unicornio"};}
 function varsTema(v,claro){
   const [g1,g2]=(v.g||claro.g).split(","),[b1,b2]=(v.b||claro.b).split(","),[r1,r2]=v.grad.split(",");
   return "--bg:"+v.bg+";--card:"+v.card+";--ink:"+v.ink+";--muted:"+v.muted+";--line:"+v.line+";--accent:"+v.accent+";--accent-soft:"+v.soft
@@ -231,7 +232,10 @@ aplicarTema();
 try{matchMedia("(prefers-color-scheme:dark)").addEventListener("change",aplicarTema);}catch(e){}
 function temasHTML(){
   const t=temaAtual();
-  return '<label class="f" style="margin-top:16px">Tema do app (só neste celular)</label>'
+  const bq=BICHOS[t.bicho]?t.bicho:"unicornio";
+  return '<label class="f" style="margin-top:16px">Personagem (só neste celular)</label>'
+   +'<div class="temas">'+Object.entries(BICHOS).map(([k,o])=>'<button class="tema bicho '+(bq===k?"on":"")+'" data-a="bicho" data-v="'+k+'"><span class="mini">'+unicornio("feliz",k)+'</span>'+o.nome+(bq===k?' ✓':'')+'</button>').join("")+'</div>'
+   +'<label class="f" style="margin-top:14px">Cor do app</label>'
    +'<div class="temas">'+Object.entries(TEMAS).map(([k,[nome,cor]])=>'<button class="tema '+(t.cor===k?"on":"")+'" data-a="tema" data-v="'+k+'"><i style="background:'+cor+'"></i>'+nome+(t.cor===k?' ✓':'')+'</button>').join("")+'</div>'
    +'<div class="seg" style="margin:8px 0 0">'+[["auto","Automático"],["claro","☀️ Claro"],["escuro","🌙 Escuro"]].map(([k,l])=>'<button class="'+(t.modo===k?"on":"")+'" data-a="tema-modo" data-v="'+k+'">'+l+'</button>').join("")+'</div>'
    +'<p style="font-size:12px;color:var(--muted);margin:6px 0 0">Automático segue o modo claro/escuro do celular.</p>';
@@ -451,7 +455,7 @@ function agendaLink(){
   return "https://calendar.google.com/calendar/render?"+q.toString();
 }
 
-// ---------- Unicórnio ----------
+// ---------- Personagem (unicórnio e amigos) ----------
 function humor(r){
   if(r.entradas<=0&&r.saidas<=0)return{k:"dorme",t:"Cochilando",m:"Nada lançado neste mês ainda. Me acorda quando entrar alguma coisa!"};
   if(r.entradas<=0)return{k:"desespero",t:"Socorro!",m:"Tem saída e nenhuma entrada lançada neste mês."};
@@ -462,8 +466,52 @@ function humor(r){
   if(p<0.30)return{k:"feliz",t:"Feliz",m:"Tá sobrando um dinheirinho. Muito bem!"};
   return{k:"radiante",t:"Radiante!",m:"Sobrando 30% ou mais do que entrou. Arrasou!"};
 }
-function unicornio(k){
-  const out='#cdb6ec',W='#ffffff';
+// Personagens: cada um com o mesmo rosto (olhos/boca mudam com o humor), corpo diferente.
+const BICHOS={
+  unicornio:{nome:"Unicórnio",corpo:()=>{const out='#cdb6ec',W='#ffffff';return ''
+     +'<circle cx="92" cy="56" r="10" fill="#b98af0"/><circle cx="97" cy="72" r="9" fill="#f39bd0"/><circle cx="94" cy="87" r="7.5" fill="#9cc9f5"/>'
+     +'<path d="M30 46 L28 16 L50 34 Z" fill="'+W+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M33 40 L32 23 L44 33 Z" fill="#f7c4e1"/>'
+     +'<path d="M90 46 L92 16 L70 34 Z" fill="'+W+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M87 40 L88 23 L76 33 Z" fill="#f7c4e1"/>'
+     +'<ellipse cx="60" cy="66" rx="35" ry="33" fill="'+W+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<ellipse cx="60" cy="85" rx="22" ry="14" fill="#f3e9fd"/><ellipse cx="53" cy="81" rx="2.2" ry="1.6" fill="#c3a8e6"/><ellipse cx="67" cy="81" rx="2.2" ry="1.6" fill="#c3a8e6"/>';},
+    topo:()=>'<circle cx="47" cy="37" r="9" fill="#f39bd0"/><circle cx="74" cy="37" r="9" fill="#9cc9f5"/><circle cx="60" cy="40" r="8" fill="#b98af0"/>'
+     +'<path d="M53 36 L60 4 L67 36 Z" fill="#f6c560" stroke="#e0a83a" stroke-width="1.5" stroke-linejoin="round"/><path d="M55.5 27 L64.5 24 M54.3 32 L65.7 29 M57 20 L63 18.5 M58.3 13 L61.7 12" stroke="#e0a83a" stroke-width="1.6" stroke-linecap="round"/>'},
+  gato:{nome:"Gatinho",corpo:()=>{const out='#e0a46a',P='#ffd29e';return ''
+     +'<path d="M27 52 L29 16 L55 36 Z" fill="'+P+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M32 45 L33 25 L48 37 Z" fill="#f7b8c4"/>'
+     +'<path d="M93 52 L91 16 L65 36 Z" fill="'+P+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M88 45 L87 25 L72 37 Z" fill="#f7b8c4"/>'
+     +'<ellipse cx="60" cy="66" rx="36" ry="32" fill="'+P+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<path d="M60 35 L60 45 M51 36.5 L53 44 M69 36.5 L67 44 M25.5 60 L33 62 M94.5 60 L87 62" stroke="#ec9445" stroke-width="3" stroke-linecap="round"/>'
+     +'<ellipse cx="60" cy="87" rx="18" ry="12" fill="#fff3e3"/><path d="M56 79 L64 79 L60 83.5 Z" fill="#f08aa0" stroke="#f08aa0" stroke-width="1.5" stroke-linejoin="round"/>';},
+    topo:()=>'<path d="M41 84 L19 80 M41 88 L19 91 M79 84 L101 80 M79 88 L101 91" stroke="#c98a55" stroke-width="1.5" stroke-linecap="round"/>'},
+  cachorro:{nome:"Caramelo",corpo:()=>{const out='#c98f4a',P='#ebba7c';return ''
+     +'<ellipse cx="60" cy="66" rx="34" ry="32" fill="'+P+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<ellipse cx="60" cy="45" rx="7" ry="9" fill="#fbe7c8"/>'
+     +'<path d="M33 38 Q12 40 12 70 Q13 84 24 81 Q30 64 40 44 Z" fill="#a8693a" stroke="#8f582f" stroke-width="2" stroke-linejoin="round"/>'
+     +'<path d="M87 38 Q108 40 108 70 Q107 84 96 81 Q90 64 80 44 Z" fill="#a8693a" stroke="#8f582f" stroke-width="2" stroke-linejoin="round"/>'
+     +'<ellipse cx="60" cy="86" rx="20" ry="13" fill="#fbe7c8"/><ellipse cx="60" cy="79" rx="6.5" ry="4.5" fill="#3b2550"/><ellipse cx="58" cy="77.6" rx="2" ry="1.2" fill="#fff" opacity=".7"/>';},
+    topo:()=>''},
+  porco:{nome:"Porquinho",corpo:()=>{const out='#e88fab',P='#ffc8d8';return ''
+     +'<path d="M30 46 L32 20 L53 35 Z" fill="#ffb0c6" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/>'
+     +'<path d="M90 46 L88 20 L67 35 Z" fill="#ffb0c6" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/>'
+     +'<ellipse cx="60" cy="66" rx="36" ry="32" fill="'+P+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<ellipse cx="60" cy="77" rx="12.5" ry="8" fill="#ff9fbb" stroke="'+out+'" stroke-width="1.5"/><ellipse cx="55.5" cy="77" rx="2.2" ry="3.2" fill="#c0577a"/><ellipse cx="64.5" cy="77" rx="2.2" ry="3.2" fill="#c0577a"/>';},
+    topo:()=>'<path d="M57 34 Q60 28 63 33 Q65 37 61 37" stroke="'+'#e88fab'+'" stroke-width="2" fill="none" stroke-linecap="round"/>'},
+  urso:{nome:"Ursinho",corpo:()=>{const out='#9c6f45',P='#c99c70';return ''
+     +'<circle cx="30" cy="38" r="12" fill="'+P+'" stroke="'+out+'" stroke-width="2"/><circle cx="30" cy="38" r="6" fill="#f2c9a8"/>'
+     +'<circle cx="90" cy="38" r="12" fill="'+P+'" stroke="'+out+'" stroke-width="2"/><circle cx="90" cy="38" r="6" fill="#f2c9a8"/>'
+     +'<ellipse cx="60" cy="66" rx="35" ry="33" fill="'+P+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<ellipse cx="60" cy="86" rx="19" ry="13" fill="#f3dcc0"/><ellipse cx="60" cy="78.5" rx="6" ry="4.2" fill="#3b2550"/><ellipse cx="58.2" cy="77.2" rx="1.8" ry="1.1" fill="#fff" opacity=".7"/>';},
+    topo:()=>''},
+  coelho:{nome:"Coelhinho",corpo:()=>{const out='#cfc4dc',W='#ffffff';return ''
+     +'<ellipse cx="44" cy="22" rx="9" ry="22" transform="rotate(-12 44 22)" fill="'+W+'" stroke="'+out+'" stroke-width="2"/><ellipse cx="44" cy="23" rx="4.3" ry="15" transform="rotate(-12 44 22)" fill="#f7c4e1"/>'
+     +'<ellipse cx="76" cy="22" rx="9" ry="22" transform="rotate(12 76 22)" fill="'+W+'" stroke="'+out+'" stroke-width="2"/><ellipse cx="76" cy="23" rx="4.3" ry="15" transform="rotate(12 76 22)" fill="#f7c4e1"/>'
+     +'<ellipse cx="60" cy="68" rx="34" ry="31" fill="'+W+'" stroke="'+out+'" stroke-width="2"/>'
+     +'<ellipse cx="60" cy="86" rx="17" ry="11.5" fill="#f6eefc"/><path d="M56.5 79 L63.5 79 L60 82.5 Z" fill="#f08aa0" stroke="#f08aa0" stroke-width="1.5" stroke-linejoin="round"/>';},
+    topo:()=>'<path d="M42 85 L24 82 M42 89 L24 92 M78 85 L96 82 M78 89 L96 92" stroke="#cfc4dc" stroke-width="1.4" stroke-linecap="round"/>'}
+};
+function bichoAtual(){const t=temaAtual();return BICHOS[t.bicho]?t.bicho:"unicornio";}
+function unicornio(k,qual){
+  const b=BICHOS[qual||bichoAtual()];
   let eyes,mouth,extra='',brows='',cheek=.55,anim='bob';
   const dot=(x)=>'<circle cx="'+x+'" cy="60" r="5" fill="#3b2550"/><circle cx="'+(x+1.8)+'" cy="58" r="1.6" fill="#fff"/>';
   switch(k){
@@ -494,22 +542,10 @@ function unicornio(k){
       extra='<text x="92" y="30" font-size="14" font-weight="700" fill="#9b6bdc" font-family="system-ui">z</text><text x="102" y="18" font-size="18" font-weight="700" fill="#9b6bdc" font-family="system-ui">Z</text>';
       cheek=.35;anim='slow';
   }
-  return '<svg viewBox="0 0 120 120" role="img" aria-label="Unicórnio '+k+'"><g class="'+anim+'">'
-   // crina de trás
-   +'<circle cx="92" cy="56" r="10" fill="#b98af0"/><circle cx="97" cy="72" r="9" fill="#f39bd0"/><circle cx="94" cy="87" r="7.5" fill="#9cc9f5"/>'
-   // orelhas
-   +'<path d="M30 46 L28 16 L50 34 Z" fill="'+W+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M33 40 L32 23 L44 33 Z" fill="#f7c4e1"/>'
-   +'<path d="M90 46 L92 16 L70 34 Z" fill="'+W+'" stroke="'+out+'" stroke-width="2" stroke-linejoin="round"/><path d="M87 40 L88 23 L76 33 Z" fill="#f7c4e1"/>'
-   // cabeça
-   +'<ellipse cx="60" cy="66" rx="35" ry="33" fill="'+W+'" stroke="'+out+'" stroke-width="2"/>'
-   // focinho
-   +'<ellipse cx="60" cy="85" rx="22" ry="14" fill="#f3e9fd"/><ellipse cx="53" cy="81" rx="2.2" ry="1.6" fill="#c3a8e6"/><ellipse cx="67" cy="81" rx="2.2" ry="1.6" fill="#c3a8e6"/>'
-   // bochechas
+  return '<svg viewBox="0 0 120 120" role="img" aria-label="'+b.nome+' '+k+'"><g class="'+anim+'">'
+   +b.corpo()
    +'<ellipse cx="34" cy="74" rx="6.5" ry="4.5" fill="#f58bb8" opacity="'+cheek+'"/><ellipse cx="86" cy="74" rx="6.5" ry="4.5" fill="#f58bb8" opacity="'+cheek+'"/>'
-   // franja
-   +'<circle cx="47" cy="37" r="9" fill="#f39bd0"/><circle cx="74" cy="37" r="9" fill="#9cc9f5"/><circle cx="60" cy="40" r="8" fill="#b98af0"/>'
-   // chifre
-   +'<path d="M53 36 L60 4 L67 36 Z" fill="#f6c560" stroke="#e0a83a" stroke-width="1.5" stroke-linejoin="round"/><path d="M55.5 27 L64.5 24 M54.3 32 L65.7 29 M57 20 L63 18.5 M58.3 13 L61.7 12" stroke="#e0a83a" stroke-width="1.6" stroke-linecap="round"/>'
+   +b.topo()
    +brows+eyes+mouth+'</g>'+extra+'</svg>';
 }
 
@@ -998,8 +1034,8 @@ document.addEventListener("click",async ev=>{
     case"dep-meta":case"ret-meta":{const m=S.items.get(id);if(m)depForm(m,a==="dep-meta"?1:-1);break;}
     case"save-dep":await saveDep();break;
     case"backup-menu":backupMenu();break;
-    case"tema":case"tema-modo":{const sh=document.querySelector(".sheet"),y=sh?sh.scrollTop:0;
-      salvarTema(a==="tema"?{cor:b.dataset.v}:{modo:b.dataset.v});render();backupMenu();
+    case"tema":case"tema-modo":case"bicho":{const sh=document.querySelector(".sheet"),y=sh?sh.scrollTop:0;
+      salvarTema(a==="tema"?{cor:b.dataset.v}:a==="bicho"?{bicho:b.dataset.v}:{modo:b.dataset.v});render();backupMenu();
       const sh2=document.querySelector(".sheet");if(sh2)sh2.scrollTop=y;break;}
     case"busca-limpar":S.busca="";{const e=document.getElementById("busca");if(e){e.value="";e.focus();}}buscaAtualiza();break;
     case"busca-escopo":S.buscaTodos=b.dataset.v==="todos";buscaAtualiza();break;
