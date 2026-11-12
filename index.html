@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="11/nov · período, pai e empréstimo";
+const VERSAO="11/nov · conta do pai por período";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -461,9 +461,9 @@ function itemLi(x){
 }
 function paiLi(v){
   return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="dei-pai" data-v="'+v+'" aria-label="Registrar que dei pro pai"></button>'
-    +'<button data-a="dei-pai" data-v="'+v+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">👨 Passar pro pai<span style="display:block;font-size:12px;color:var(--muted)">o que você deve a ele até agora</span></button><span>'+fmt(v)+'</span></li>';
+    +'<button data-a="dei-pai" data-v="'+v+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">👨 Passar pro pai<span style="display:block;font-size:12px;color:var(--muted)">sua parte nas contas dele '+(modoPeriodo()?"deste período":"deste mês")+'</span></button><span>'+fmt(v)+'</span></li>';
 }
-function paiAPagar(P){return P>=perHoje()&&temPai()?Math.max(0,saldoPai(P)):0;}
+function paiAPagar(P){return temPai()?Math.max(0,saldoPai(P)):0;}
 function payCard(P){
   const it=pendentes(P),at=atrasadas(P),paiV=paiAPagar(P);if(!it.length&&!at.length&&!paiV)return"";
   const per=modoPeriodo(),P0=perHoje(),c=cfg(),totM=it.reduce((a,x)=>a+x.v,0)+paiV,totA=at.reduce((a,x)=>a+x.v,0),tot=totM+totA,hoje=todayStr(),dia=Number(hoje.slice(8));
@@ -494,7 +494,7 @@ function payCard(P){
 async function pagarTudo(){
   const P=S.month,lista=pendentes(P).concat(atrasadas(P)),pv=paiAPagar(P);
   for(const x of lista){const o=S.items.get(x.o.id);if(o&&!pago(o,x.m))await store.set(Object.assign({},o,{pagas:(o.pagas||[]).concat([x.m])}));}
-  if(pv>0)await addRepasse(pv,todayStr(),"acerto");
+  if(pv>0)await addRepasse(pv,P===perHoje()?todayStr():dataDe(P,diaIni()),"acerto");
   S.confirmPagar=false;render();toast("Tudo pago! 🦄");
 }
 
@@ -534,32 +534,26 @@ async function saveParte(){
 // ---------- Conta com o pai ----------
 const paiObj=()=>S.items.get("pai")||{kind:"pai",id:"pai",repasses:[]};
 function temPai(){return all("tx").some(t=>t.metodo==="pai")||all("fixa").some(f=>f.metodo==="pai"&&f.tipo!=="entrada")||(paiObj().repasses||[]).length>0;}
-function devidoPai(P){
-  let s=0;
-  all("tx").filter(t=>t.metodo==="pai"&&t.tipo!=="entrada").forEach(t=>expand(t).forEach(p=>{if(perDe(p.mes,diaTx(t))<=P)s+=p.valor+jurosTx(p);}));
-  all("fixa").filter(f=>f.metodo==="pai"&&f.tipo!=="entrada").forEach(f=>{for(let m=f.inicio;m<=addM(P,1);m=addM(m,1)){if(fixaAtiva(f,m)&&perDe(m,f.dia)<=P)s+=fixaValor(f,m)+jurosFixa(f,m);}});
-  return Math.round(s*100)/100;
-}
-function saldoPai(P){const fim=perFim(P);return Math.round((devidoPai(P)-(paiObj().repasses||[]).filter(r=>r.data<=fim).reduce((a,r)=>a+r.valor,0))*100)/100;}
+function repassesPer(P){return (paiObj().repasses||[]).filter(x=>perData(x.data)===P);}
+function saldoPai(P,r){r=r||calcMes(P);return Math.round((r.pai-repassesPer(P).reduce((a,x)=>a+x.valor,0))*100)/100;}
 async function addRepasse(v,d,nota){const o=paiObj();await store.set(Object.assign({},o,{repasses:(o.repasses||[]).concat([{id:uid(),data:d,valor:v,nota:nota||""}])}));}
 function paiSecao(P,r){
   if(!temPai())return"";
-  const per=modoPeriodo(),saldo=saldoPai(P),deste=(paiObj().repasses||[]).filter(x=>perData(x.data)===P).sort((a,b)=>b.data.localeCompare(a.data));
-  return '<section><h2>👨 Conta com o pai <button class="btn small" data-a="dei-pai">+ Dei pro pai</button></h2><div class="list">'
-   +'<div class="row"><div class="main"><div class="t">Sua parte nas contas dele</div><div class="s">neste '+(per?"período":"mês")+' (o que ele paga e você passa pra ele)</div></div><div class="v">'+fmt(r.pai)+'</div></div>'
-   +deste.map(x=>'<div class="row"><div class="main"><div class="t">'+(x.valor>=0?"Dei pro pai":"Dívida antiga com ele")+(x.nota?' · '+esc(x.nota):'')+'</div><div class="s">'+fmtDataAno(x.data)+'</div></div><div class="v '+(x.valor>=0?"pos":"neg")+'">'+fmt(Math.abs(x.valor))+'</div><button class="x" style="font-size:18px" data-a="del-repasse" data-id="'+x.id+'" aria-label="Apagar">×</button></div>').join("")
-   +'<div class="row"><div class="main"><div class="t" style="font-weight:650">'+(saldo>0.005?"Você ainda deve ao pai":saldo<-0.005?"Você deu a mais (fica de crédito)":"Tudo acertado com o pai ✓")+'</div><div class="s">somando tudo até '+fmtDataAno(perFim(P))+'</div></div><div class="v '+(saldo>0.005?"neg":"pos")+'">'+fmt(Math.abs(saldo))+'</div></div>'
+  const per=modoPeriodo(),deste=repassesPer(P).sort((a,b)=>b.data.localeCompare(a.data)),dei=deste.reduce((a,x)=>a+x.valor,0),saldo=saldoPai(P,r),q=per?"período":"mês";
+  return '<section><h2>👨 Conta com o pai <button class="btn small" data-a="dei-pai" data-v="'+Math.max(0,saldo)+'">+ Dei pro pai</button></h2><div class="list">'
+   +'<div class="row"><div class="main"><div class="t">Sua parte nas contas dele</div><div class="s">o que vence neste '+q+'</div></div><div class="v">'+fmt(r.pai)+'</div></div>'
+   +deste.map(x=>'<div class="row"><div class="main"><div class="t">Dei pro pai'+(x.nota?' · '+esc(x.nota):'')+'</div><div class="s">'+fmtDataAno(x.data)+'</div></div><div class="v pos">'+fmt(x.valor)+'</div><button class="x" style="font-size:18px" data-a="del-repasse" data-id="'+x.id+'" aria-label="Apagar">×</button></div>').join("")
+   +'<div class="row"><div class="main"><div class="t" style="font-weight:650">'+(saldo>0.005?"Falta passar pro pai":saldo<-0.005?"Você deu a mais neste "+q:(r.pai>0||dei>0?"Tudo acertado neste "+q+" ✓":"Nada com o pai neste "+q))+'</div><div class="s">só o que é deste '+q+'</div></div><div class="v '+(saldo>0.005?"neg":"pos")+'">'+fmt(Math.abs(saldo))+'</div></div>'
    +'</div></section>';
 }
 function paiForm(v){
+  const P=S.month,d=P===perHoje()?todayStr():dataDe(P,diaIni());
   F={type:"pai"};
-  openSheet('<h3>Conta com o pai<button class="x" data-a="close">×</button></h3>'
+  openSheet('<h3>Dei pro pai<button class="x" data-a="close">×</button></h3>'
    +'<input class="inp money money-in" id="pv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off" value="'+(v>0?esc(moneyIn(v)):"")+'">'
-   +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="pd" value="'+todayStr()+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="pn" placeholder="Ex.: Pix"></div></div>'
-   +'<div class="hint">Hoje você deve ao pai: <b>'+fmt(Math.max(0,saldoPai(perHoje())))+'</b></div><div id="perr"></div>'
-   +'<button class="btn" data-a="save-pai" data-v="deu">Dei pro pai</button>'
-   +'<button class="btn ghost" style="color:var(--ink)" data-a="save-pai" data-v="divida">Lançar como dívida antiga com ele</button>'
-   +'<p style="font-size:13px;color:var(--muted);margin:6px 0 0">"Dei pro pai" abate do total. "Dívida antiga" é para o que você já devia antes de começar a usar o app.</p>');
+   +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="pd" value="'+d+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="pn" placeholder="Ex.: Pix"></div></div>'
+   +'<div class="hint">Falta passar em '+nomePer(P)+': <b>'+fmt(Math.max(0,saldoPai(P)))+'</b><br>O valor abate do '+(modoPeriodo()?"período":"mês")+' da data escolhida.</div><div id="perr"></div>'
+   +'<button class="btn" data-a="save-pai" data-v="deu">Registrar</button>');
   setTimeout(()=>{const e=document.getElementById("pv");e&&e.focus();},50);
 }
 function agendaLink(){
@@ -1312,7 +1306,7 @@ document.addEventListener("click",async ev=>{
     case"dei-pai":paiForm(Number(b.dataset.v)||0);break;
     case"save-pai":{const v=parseMoney(document.getElementById("pv").value),d=document.getElementById("pd").value||todayStr(),n=document.getElementById("pn").value.trim();
       if(isNaN(v)||v<=0){document.getElementById("perr").innerHTML='<div class="err">Digite um valor maior que zero.</div>';break;}
-      closeSheet();await addRepasse(b.dataset.v==="divida"?-v:v,d,n);toast(b.dataset.v==="divida"?"Dívida antiga lançada":"Registrado! 💜");break;}
+      closeSheet();await addRepasse(v,d,n);toast("Registrado! 💜");break;}
     case"del-repasse":{const o=paiObj();await store.set(Object.assign({},o,{repasses:(o.repasses||[]).filter(x=>x.id!==id)}));toast("Apagado");break;}
     case"disp-card":{const c=S.items.get(id);if(c)dispForm(c);break;}
     case"save-disp":{const c=S.items.get(F.id),v=parseMoney(document.getElementById("dpv").value);
