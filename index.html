@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="12/nov · detalhe das categorias";
+const VERSAO="12/nov · limite dos cartões";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -811,7 +811,7 @@ function viewMes(){
     r.faturas.forEach(f=>{
       const k="fat-"+f.card.id+"-"+f.m, open=!!S.open[k], parte=pagoParte(f.card,f.m), emp=ehEmprestimo(f.card);
       h+='<div class="row '+(f.paga?"paid":"")+'"><button class="check '+(f.paga?"on":"")+'" data-a="pay-fat" data-id="'+f.card.id+'" data-m="'+f.m+'" aria-label="Marcar como paga">'+(f.paga?"✓":"")+'</button>'
-        +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="toggle" data-k="'+k+'"><div class="t">'+(emp?"💸 ":"")+esc(f.card.nome)+' '+(open?"▾":"▸")+'</div><div class="s">vence '+(per?fmtData(dataDe(f.m,f.card.vencimento)):'dia '+f.card.vencimento)+' · '+f.ps.length+' item(ns)'+(f.paga?' · paga':parte?' · pago '+fmt(parte)+', falta '+fmt(resta(f.card,f.m,f.total)):'')+'</div></button>'
+        +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="toggle" data-k="'+k+'"><div class="t">'+(emp?"💸 ":"")+esc(f.card.nome)+' '+(open?"▾":"▸")+'</div>'+(!emp&&f.card.limite>0?(()=>{const d=Math.round((f.card.limite-limiteUsado(f.card))*100)/100;return '<div class="s">limite disponível <b class="'+(d<0?"neg":"pos")+'">'+fmt(d)+'</b> de '+fmt(f.card.limite)+'</div>';})():'')+'<div class="s">vence '+(per?fmtData(dataDe(f.m,f.card.vencimento)):'dia '+f.card.vencimento)+' · '+f.ps.length+' item(ns)'+(f.paga?' · paga':parte?' · pago '+fmt(parte)+', falta '+fmt(resta(f.card,f.m,f.total)):'')+'</div></button>'
         +'<div class="v">'+fmt(f.total)+'</div></div>';
       if(open){
         h+='<div class="sub">'+f.ps.sort((a,b)=>a.tx.data.localeCompare(b.tx.data)).map(p=>p.fixa
@@ -1058,7 +1058,8 @@ function limiteUsado(card,excluir){
   const fm=faturaMes(todayStr(),card);
   all("fixa").forEach(f=>{const cc=fixaNoCartao(f);if(!cc||cc.id!==card.id)return;
     for(let k=12;k>=0;k--){const FM=addM(fm,-k);if(!pago(card,FM))cobrancasFixa(f,card,[FM]).forEach(p=>{u+=p.valor;});}});
-  return Math.round(u*100)/100;
+  if(!ehEmprestimo(card))Object.keys(card.parciais||{}).forEach(m=>{if(!pago(card,m))u-=pagoParte(card,m);}); // o que já pagou da fatura volta pro limite
+  return Math.max(0,Math.round(u*100)/100);
 }
 // quanto do limite de empréstimo está em uso (o valor que você pegou, sem os juros, das parcelas que faltam)
 function principalAberto(c){
