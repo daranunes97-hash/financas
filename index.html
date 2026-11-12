@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="12/nov · empréstimos agrupados";
+const VERSAO="12/nov · saldo nas contas";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -517,6 +517,64 @@ async function pagarTudo(){
   S.confirmPagar=false;render();toast("Tudo pago! 🦄");
 }
 
+// ---------- Saldo nas contas (o que entrou menos o que foi pago de verdade) ----------
+function caixaPer(P,hoje){
+  const r=calcMes(P);let ent=0,sai=0;
+  r.parcelas.forEach(p=>{const t=p.tx;
+    if(t.tipo==="entrada"){if(t.data<=hoje)ent+=p.valor;return;}
+    if(t.metodo==="pai")return;            // conta do pai: sai pelo "Dei pro pai"
+    if(p.card&&!empP(p))return;            // cartão: sai quando paga a fatura
+    const v=p.valor+jurosTx(p);
+    if(baixaP(p))sai+=pago(t,p.mes)?v:pagoParte(t,p.mes);
+    else if(t.data<=hoje)sai+=v;           // Pix, débito, dinheiro: saiu na data
+  });
+  r.fixas.forEach(x=>{const f=x.f;
+    if(f.tipo==="entrada"){if(pago(f,x.m))ent+=x.v;return;}
+    if(fixaNoCartao(f)||f.metodo==="pai")return;
+    sai+=pago(f,x.m)?x.v+x.j:pagoParte(f,x.m);});
+  r.faturas.forEach(f=>{sai+=f.paga?f.total:pagoParte(f.card,f.m);});
+  r.cofre.forEach(({d})=>{if(d.data<=hoje){if(d.valor>=0)sai+=d.valor;else ent+=-d.valor;}});
+  r.antecip.forEach(({a})=>{if(a.data<=hoje)sai+=a.valor;});
+  repassesPer(P).forEach(x=>{if(x.data<=hoje)sai+=x.valor;});
+  return ent-sai;
+}
+let _sb={items:null,v:0,dia:""};
+function saldoBruto(){
+  const hoje=todayStr();if(_sb.items===S.items&&_sb.dia===hoje)return _sb.v;
+  let ini=perHoje();const ver=d=>{if(d){const m=String(d).slice(0,7);if(m<ini)ini=m;}};
+  all("tx").forEach(t=>ver(t.data));all("fixa").forEach(f=>ver(f.inicio));
+  all("meta").forEach(m=>(m.depositos||[]).forEach(d=>ver(d.data)));(paiObj().repasses||[]).forEach(x=>ver(x.data));
+  cards().forEach(c=>(c.antecipacoes||[]).forEach(a=>ver(a.data)));
+  let v=0;const fim=addM(perHoje(),24);
+  for(let P=addM(ini,-1);P<=fim;P=addM(P,1))v+=caixaPer(P,hoje);
+  _sb={items:S.items,v:Math.round(v*100)/100,dia:hoje};return _sb.v;
+}
+function saldoApp(){return Math.round((saldoBruto()+(Number(cfg().saldoAjuste)||0))*100)/100;}
+function saldoTile(){
+  const c=cfg(),s=saldoApp();
+  return '<button class="tile" data-a="saldo" style="width:100%;text-align:left;margin:-4px 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;font:inherit;color:inherit">'
+   +'<span style="min-width:0"><small style="font-size:13px;color:var(--ink);font-weight:600">💰 Saldo nas suas contas</small>'
+   +'<span style="display:block;font-size:12px;color:var(--muted)">'+(c.saldoData?'pelo app · conferido com o banco em '+fmtDataAno(c.saldoData)+' · toque para conferir':'toque para informar o saldo do banco e começar')+'</span></span>'
+   +'<b style="font-size:20px" class="'+(s>=0?"pos":"neg")+'">'+fmt(s)+'</b></button>';
+}
+function saldoForm(){
+  F={type:"saldo"};
+  openSheet('<h3>Conferir saldo<button class="x" data-a="close">×</button></h3>'
+   +'<div class="hint" style="margin-top:0">Pelo app, você deveria ter <b>'+fmt(saldoApp())+'</b> somando todas as suas contas.</div>'
+   +'<label class="f">Quanto os bancos mostram agora? (some todas as contas, inclusive reservas e caixinhas)</label>'
+   +'<input class="inp money money-in" id="sv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off"><div id="sres"></div>'
+   +'<button class="btn" data-a="save-saldo">Usar este valor como meu saldo de hoje</button>'
+   +'<p style="font-size:13px;color:var(--muted);margin:8px 0 0">Faça isso quando tudo estiver lançado. Daqui pra frente, cada entrada, cada gasto no Pix ou débito e cada conta que você marcar como paga muda o saldo sozinho. Quando quiser conferir, é só digitar o valor do banco aqui: se não bater, a diferença mostra quanto falta lançar.</p>');
+  setTimeout(()=>{const e=document.getElementById("sv");e&&e.focus();},50);
+}
+function saldoRes(){
+  const el=document.getElementById("sres");if(!el)return;const v=parseMoney(document.getElementById("sv").value);
+  if(isNaN(v)){el.innerHTML="";return;}const d=Math.round((v-saldoApp())*100)/100;
+  el.innerHTML=Math.abs(d)<0.01?'<div class="hint" style="background:var(--accent-soft);color:var(--accent)">✓ Bate certinho com o app!</div>'
+   :d<0?'<div class="hint" style="background:var(--red-soft);color:var(--red)">O banco tem <b>'+fmt(-d)+' a menos</b> que o app. Falta lançar uma saída desse valor, ou marcar como paga uma conta que você já pagou.</div>'
+   :'<div class="hint">O banco tem <b>'+fmt(d)+' a mais</b> que o app. Falta lançar uma entrada desse valor, ou tem conta marcada como paga que ainda não saiu do banco.</div>';
+}
+
 // ---------- Grupo de parcelas de empréstimo ----------
 function keysParc(k){return (k||"").split(",").filter(Boolean).map(x=>{const[id,mes]=x.split("|");const t=S.items.get(id);return t?expand(t).find(p=>p.mes===mes):null;}).filter(Boolean);}
 function empGrupo(cid,k){
@@ -730,7 +788,7 @@ function viewMes(){
     +(()=>{const hm=humor(r),pct=r.entradas>0?Math.round(r.sobra/r.entradas*100):null;
       return '<div class="mood"><div class="uni">'+unicornio(hm.k)+'</div><div class="txt"><div class="lbl">'+hm.t+'</div><div class="msg">'+hm.m+'</div>'
       +'<small style="color:var(--muted)">Sobra do '+(per?"período":"mês")+(pct!=null?' · '+pct+'% das entradas':'')+'</small><br><b class="'+(r.sobra>=0?"pos":"neg")+'">'+fmt(r.sobra)+'</b></div></div>';})()
-    +'</div>'+payCard(mes);
+    +'</div>'+(mes===perHoje()?saldoTile():'')+payCard(mes);
 
   // Contas fixas
   const fx=r.fixas.slice().sort((a,b)=>dataDe(a.m,a.f.dia).localeCompare(dataDe(b.m,b.f.dia)));
@@ -1389,6 +1447,9 @@ document.addEventListener("click",async ev=>{
       toast(b.dataset.v==="periodo"?"Agora a tela mostra por período":"Agora a tela mostra por mês");break;}
     case"pagar-parte":parteForm(b.dataset.t,id,b.dataset.m);break;
     case"emp-grupo":empGrupo(id,b.dataset.k);break;
+    case"saldo":saldoForm();break;
+    case"save-saldo":{const v=parseMoney(document.getElementById("sv").value);if(isNaN(v)){saldoRes();break;}
+      closeSheet();await store.set(Object.assign({},S.items.get("config")||{kind:"config",id:"config"},cfg(),{kind:"config",id:"config",saldoAjuste:Math.round((v-saldoBruto())*100)/100,saldoData:todayStr()}));toast("Saldo salvo 💜");break;}
     case"pay-emp":{const ps=keysParc(b.dataset.k),desf=!!b.dataset.desfaz;if(b.dataset.fecha)closeSheet();
       for(const p of ps){const o=S.items.get(p.tx.id);if(!o)continue;const tem=pago(o,p.mes);
         if(desf&&tem)await store.set(Object.assign({},o,{pagas:(o.pagas||[]).filter(m=>m!==p.mes)}));
@@ -1453,6 +1514,7 @@ document.getElementById("fab").addEventListener("click",()=>txForm());
 document.addEventListener("input",ev=>{
   if(ev.target.id==="busca"){S.busca=ev.target.value;buscaAtualiza();return;}
   if(ev.target.id==="antv"&&F&&F.type==="antecip"){F.valStr=ev.target.value;antRes();return;}
+  if(ev.target.id==="sv"){saldoRes();return;}
   if(!F||F.type!=="tx")return;
   if(["fv","fp","fdt","fjp","fpg","fvd"].includes(ev.target.id)){readTxInputs();updatePreview();}
 });
@@ -1466,6 +1528,7 @@ document.addEventListener("keydown",ev=>{
     else if(F.type==="tx")saveTx();else if(F.type==="fixa")saveFixa();else if(F.type==="card")saveCard();
     else if(F.type==="meta")saveMeta();else if(F.type==="dep")saveDep();else if(F.type==="fixames"){const b=document.querySelector('[data-a="save-fixames"]');b&&b.click();}
     else if(F.type==="parte")saveParte();else if(F.type==="disp"){const b=document.querySelector('[data-a="save-disp"]');b&&b.click();}
+    else if(F.type==="saldo"){const b=document.querySelector('[data-a="save-saldo"]');b&&b.click();}
     else if(F.type==="pai"){const b=document.querySelector('[data-a="save-pai"][data-v="deu"]');b&&b.click();}}
 });
 
