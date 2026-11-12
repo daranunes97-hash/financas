@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="11/nov · desconto na parcela";
+const VERSAO="12/nov · vencimento do empréstimo";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -352,6 +352,14 @@ const pagoParte=(o,m)=>Math.round(((o.parciais&&o.parciais[m])||[]).reduce((a,x)
 const resta=(o,m,v)=>Math.max(0,Math.round((v-pagoParte(o,m))*100)/100);
 const diaTx=t=>Number(t.data.slice(8));
 const ehEmprestimo=c=>c&&c.tipo==="emprestimo";
+function diaVencTx(t){const c=t.metodo==="cartao"?cardById(t.cardId):null;
+  if(c&&!ehEmprestimo(c))return Number(c.vencimento);
+  if(c)return Number(t.diaVenc)||((Number(t.jaPagas)||0)>0?diaTx(t):Number(c.vencimento));
+  return diaTx(t);}
+const diaVencP=p=>diaVencTx(p.tx);
+const vencP=p=>dataDe(p.mes,diaVencP(p));
+const empP=p=>!!(p.card&&ehEmprestimo(p.card));
+const baixaP=p=>p.tx.tipo!=="entrada"&&(COM_BAIXA(p.tx.metodo)||empP(p)); // parcela com baixa própria
 const fixaNoCartao=f=>f.tipo!=="entrada"&&f.metodo==="cartao"?cardById(f.cardId):null;
 function cobrancasFixa(f,c,FMs){ // conta fixa no cartão vira item da fatura que vence em FM
   const out=[];
@@ -367,7 +375,7 @@ function faturaTotal(c,m){let s=0;
 function calcMes(P){
   const D=diaIni(),meses=D>1?[P,addM(P,1)]:[P],noPer=(m,dia)=>meses.includes(m)&&perDe(m,dia)===P;
   const parcelas=[];
-  all("tx").forEach(t=>expand(t).forEach(p=>{if(noPer(p.mes,p.card?p.card.vencimento:diaTx(t)))parcelas.push(p);}));
+  all("tx").forEach(t=>expand(t).forEach(p=>{if(noPer(p.mes,diaVencP(p)))parcelas.push(p);}));
   all("fixa").forEach(f=>{const c=fixaNoCartao(f);if(c)cobrancasFixa(f,c,meses).forEach(p=>{if(noPer(p.mes,c.vencimento))parcelas.push(p);});});
   let entradas=0,saidas=0,falta=0,juros=0,guardado=0,retirado=0,pai=0;const porCat={},cofre=[],antecip=[];
   const addCat=(c,v)=>{porCat[c]=(porCat[c]||0)+v;};
@@ -376,7 +384,7 @@ function calcMes(P){
     const j=jurosTx(p);
     saidas+=p.valor+j;addCat(p.tx.categoria||"Outros",p.valor);if(j){juros+=j;addCat(CAT_JUROS,j);}
     if(p.tx.metodo==="pai")pai+=p.valor+j;
-    else if(COM_BAIXA(p.tx.metodo)&&!pago(p.tx,p.mes))falta+=resta(p.tx,p.mes,p.valor+j);
+    else if(baixaP(p)&&!pago(p.tx,p.mes))falta+=resta(p.tx,p.mes,p.valor+j);
   });
   const fixas=[];
   all("fixa").forEach(f=>meses.forEach(m=>{if(fixaAtiva(f,m)&&noPer(m,f.dia))fixas.push({f,m,v:fixaValor(f,m),j:jurosFixa(f,m)});}));
@@ -393,7 +401,7 @@ function calcMes(P){
   }));
   cards().forEach(c=>(c.antecipacoes||[]).forEach(a=>{if(perData(a.data)!==P)return;antecip.push({c,a});saidas+=a.valor;addCat(a.categoria||"Outros",a.valor);}));
   const faturas=[];
-  cards().forEach(c=>meses.forEach(m=>{if(!noPer(m,c.vencimento))return;
+  cards().filter(c=>!ehEmprestimo(c)).forEach(c=>meses.forEach(m=>{if(!noPer(m,c.vencimento))return;
     const ps=parcelas.filter(p=>p.card&&p.card.id===c.id&&p.mes===m&&p.tx.tipo!=="entrada");if(!ps.length)return;
     const total=Math.round(ps.reduce((a,p)=>a+p.valor,0)*100)/100,paga=pago(c,m);
     if(!paga)falta+=resta(c,m,total);
@@ -444,7 +452,7 @@ function pendentes(P){
   r.fixas.forEach(x=>{const f=x.f;if(f.tipo==="entrada"||fixaNoCartao(f)||f.metodo==="pai"||pago(f,x.m))return;
     it.push({t:"fixa",o:f,m:x.m,nome:f.desc,total:x.v+x.j,dia:f.dia});});
   r.faturas.filter(f=>!f.paga&&f.total>0).forEach(f=>it.push({t:"fat",o:f.card,m:f.m,nome:(ehEmprestimo(f.card)?"Parcela ":"Fatura ")+f.card.nome,total:f.total,dia:f.card.vencimento}));
-  r.parcelas.filter(p=>p.tx.tipo!=="entrada"&&COM_BAIXA(p.tx.metodo)&&!pago(p.tx,p.mes)).forEach(p=>it.push({t:"bol",o:p.tx,m:p.mes,nome:(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),total:p.valor+jurosTx(p),dia:diaTx(p.tx)}));
+  r.parcelas.filter(p=>baixaP(p)&&!pago(p.tx,p.mes)).forEach(p=>it.push({t:"bol",o:p.tx,m:p.mes,nome:(empP(p)&&!norm(p.tx.desc).includes(norm(p.card.nome))?p.card.nome+" · ":"")+(p.tx.desc||p.tx.categoria)+(p.n>1?" ("+p.i+"/"+p.n+")":""),total:p.valor+jurosTx(p),dia:diaVencP(p)}));
   it.forEach(x=>{x.parte=pagoParte(x.o,x.m);x.v=resta(x.o,x.m,x.total);x.venc=dataDe(x.m,x.dia);});
   return it.sort((a,b)=>a.venc.localeCompare(b.venc));
 }
@@ -714,7 +722,7 @@ function viewMes(){
 
   // Faturas
   if(r.faturas.length){
-    h+='<section><h2>Faturas de cartão e empréstimos</h2><div class="list">';
+    h+='<section><h2>Faturas de cartão</h2><div class="list">';
     r.faturas.forEach(f=>{
       const k="fat-"+f.card.id+"-"+f.m, open=!!S.open[k], parte=pagoParte(f.card,f.m), emp=ehEmprestimo(f.card);
       h+='<div class="row '+(f.paga?"paid":"")+'"><button class="check '+(f.paga?"on":"")+'" data-a="pay-fat" data-id="'+f.card.id+'" data-m="'+f.m+'" aria-label="Marcar como paga">'+(f.paga?"✓":"")+'</button>'
@@ -743,16 +751,17 @@ function viewMes(){
   return h;
 }
 function lancMesHTML(r){
-  const ls=r.parcelas.filter(p=>!p.card||p.tx.tipo==="entrada").sort((a,b)=>b.tx.data.localeCompare(a.tx.data));
+  const quando=p=>(p.n>1||empP(p))?vencP(p):p.tx.data;
+  const ls=r.parcelas.filter(p=>!p.card||p.tx.tipo==="entrada"||empP(p)).sort((a,b)=>quando(b).localeCompare(quando(a)));
   let h='<div class="list">';
   if(!ls.length&&!r.cofre.length&&!r.antecip.length)h+='<div class="empty">Nada lançado '+(modoPeriodo()?"neste período":"neste mês")+' fora do cartão. Toque no + para adicionar.</div>';
   ls.forEach(p=>{
-    const t=p.tx, ent=t.tipo==="entrada", bol=COM_BAIXA(t.metodo)&&!ent, pai=t.metodo==="pai"&&!ent, pg=bol&&pago(t,p.mes), parte=bol&&!pg?pagoParte(t,p.mes):0;
+    const t=p.tx, ent=t.tipo==="entrada", bol=baixaP(p), pai=t.metodo==="pai"&&!ent, pg=bol&&pago(t,p.mes), parte=bol&&!pg?pagoParte(t,p.mes):0;
     const met=ent?"entrada":(METODOS.find(m=>m[0]===t.metodo)||["","Outro"])[1];
     h+='<div class="row '+(pg?"paid":"")+'">'
       +(bol?'<button class="check '+(pg?"on":"")+'" data-a="pay-bol" data-id="'+t.id+'" data-m="'+p.mes+'" aria-label="Marcar parcela paga">'+(pg?"✓":"")+'</button>'
         :pai?'<span class="check" style="border:0">👨</span>':'<span class="dot" style="background:'+(catColor(t.categoria,ent))+'"></span>')
-      +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="edit-tx" data-id="'+t.id+'"><div class="t">'+esc(t.desc||t.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+(p.n>1?'compra em ':'')+fmtData(t.data)+' · '+esc(t.categoria)+' · '+met+(parte?' · pago '+fmt(parte):'')+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></button>'
+      +'<button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="edit-tx" data-id="'+t.id+'"><div class="t">'+esc(t.desc||t.categoria)+(p.n>1?'<span class="badge">'+p.i+'/'+p.n+'</span>':'')+'</div><div class="s">'+((p.n>1||empP(p))?'vence '+fmtData(vencP(p)):fmtData(t.data))+' · '+esc(t.categoria)+' · '+(empP(p)?'💸 '+esc(p.card.nome):met)+(parte?' · pago '+fmt(parte):'')+(p.desc?' · <span class="pos">com desconto (era '+fmt(p.orig)+')</span>':'')+'</div></button>'
       +'<div class="v '+(ent?"pos":"")+'">'+(ent?"+":"")+fmt(p.valor)+(jurosTx(p)?'<div class="s neg" style="text-align:right">+ '+fmt(jurosTx(p))+' juros</div>':'')+'</div></div>';
   });
   r.antecip.sort((a,b)=>b.a.data.localeCompare(a.a.data)).forEach(({c,a})=>{
@@ -910,7 +919,7 @@ function celebrar(m){
 function limiteUsado(card,excluir){
   let u=0;
   all("tx").forEach(t=>{if(t.cardId!==card.id||t.tipo==="entrada"||t.id===excluir)return;
-    expand(t).forEach(p=>{if(!pago(card,p.mes))u+=p.valor;});});
+    expand(t).forEach(p=>{if(!(empP(p)?pago(t,p.mes):pago(card,p.mes)))u+=p.valor;});});
   const fm=faturaMes(todayStr(),card);
   all("fixa").forEach(f=>{const cc=fixaNoCartao(f);if(!cc||cc.id!==card.id)return;
     for(let k=12;k>=0;k--){const FM=addM(fm,-k);if(!pago(card,FM))cobrancasFixa(f,card,[FM]).forEach(p=>{u+=p.valor;});}});
@@ -920,12 +929,12 @@ function limiteUsado(card,excluir){
 function principalAberto(c){
   let s=0;
   all("tx").forEach(t=>{if(t.cardId!==c.id||t.tipo==="entrada")return;const base=Number(t.pego)>0?Number(t.pego):t.valor;
-    expand(t).forEach(p=>{if(!pago(c,p.mes))s+=p.valor/t.valor*base;});});
+    expand(t).forEach(p=>{if(!pago(t,p.mes))s+=p.valor/t.valor*base;});});
   return Math.round(s*100)/100;
 }
 function parcelasAbertas(c){
   const out=[];
-  all("tx").forEach(t=>{if(t.cardId!==c.id||t.tipo==="entrada")return;expand(t).forEach(p=>{if(!pago(c,p.mes))out.push(p);});});
+  all("tx").forEach(t=>{if(t.cardId!==c.id||t.tipo==="entrada")return;expand(t).forEach(p=>{if(!pago(t,p.mes))out.push(p);});});
   return out.sort((a,b)=>a.mes.localeCompare(b.mes)||(a.tx.desc||"").localeCompare(b.tx.desc||""));
 }
 function taxaMes(pego,parc,n){
@@ -944,10 +953,10 @@ function cardEmprestimo(c){
   const deve=limiteUsado(c),princ=principalAberto(c),lim=Number(c.limite)||0,disp=lim>0?Math.round((lim-princ)*100)/100:null;
   const txs=all("tx").filter(t=>t.cardId===c.id&&t.tipo!=="entrada"),abertas=parcelasAbertas(c);
   let jurosAb=0,semPego=0;
-  txs.forEach(t=>{const ab=expand(t).filter(p=>!pago(c,p.mes)).reduce((a,p)=>a+p.valor,0);if(!ab)return;
+  txs.forEach(t=>{const ab=expand(t).filter(p=>!pago(t,p.mes)).reduce((a,p)=>a+p.valor,0);if(!ab)return;
     if(Number(t.pego)>0)jurosAb+=ab*(1-t.pego/t.valor);else semPego++;});
   const pct=lim>0?Math.min(100,Math.max(0,disp/lim*100)):0;
-  let h='<div class="meta"><button class="top" data-a="edit-card" data-id="'+c.id+'" style="border:0;background:none;padding:0;width:100%;text-align:left"><span class="emo">💸</span><span style="flex:1;min-width:0"><span class="t" style="display:block;font-weight:650">'+esc(c.nome)+'</span><span class="s" style="font-size:12px;color:var(--muted)">empréstimo · parcela vence dia '+c.vencimento+'</span></span><span class="s" style="font-size:12px;color:var(--muted)">editar</span></button>';
+  let h='<div class="meta"><button class="top" data-a="edit-card" data-id="'+c.id+'" style="border:0;background:none;padding:0;width:100%;text-align:left"><span class="emo">💸</span><span style="flex:1;min-width:0"><span class="t" style="display:block;font-weight:650">'+esc(c.nome)+'</span><span class="s" style="font-size:12px;color:var(--muted)">empréstimo · cada empréstimo tem o seu dia de vencimento</span></span><span class="s" style="font-size:12px;color:var(--muted)">editar</span></button>';
   if(disp!=null)h+='<div style="display:flex;justify-content:space-between;margin-top:10px;font-size:14px"><span>Disponível para empréstimo</span><b class="'+(disp<0?"neg":"pos")+'">'+fmt(disp)+'</b></div>'
     +'<div class="bar"><i style="width:'+pct+'%;background:linear-gradient(90deg,var(--b1),var(--b2))"></i></div>'
     +'<div class="s" style="font-size:12px;color:var(--muted)">Limite '+fmt(lim)+' · em uso '+fmt(princ)+(c.dispData?' · conferido com o app em '+fmtDataAno(c.dispData):'')+'</div>';
@@ -1098,6 +1107,7 @@ function drawTx(focus){
   }else t.jaPagas=0;
   const lblData=t.parcelas>1?(t.jaPagas>0?(t.metodo==="cartao"?"Vencimento da fatura da "+(t.jaPagas+1)+"ª parcela":"Vencimento da "+(t.jaPagas+1)+"ª parcela"):"Data da compra"):"Data";
   h+='<label class="f">'+lblData+'</label><input class="inp" type="date" id="fdt" value="'+esc(t.data)+'">';
+  if(emp)h+='<label class="f">Dia que vencem as parcelas deste empréstimo</label><input class="inp" id="fvd" inputmode="numeric" value="'+esc(F.diaVencStr!=null?F.diaVencStr:String(t.diaVenc||((t.jaPagas||0)>0?diaTx(t):cSel.vencimento)))+'">';
   if(emp)h+='<label class="f">Quanto você pegou emprestado (opcional)</label><input class="inp money-in" id="fpg" inputmode="numeric" placeholder="R$ 0,00" value="'+esc(F.pegoStr||"")+'"><div class="hint" style="margin-top:4px">Com isso o app calcula quanto é juros. No valor lá em cima, coloque a parcela que você paga.</div>';
   h+='<div id="prev"></div>';
   if(F.err)h+='<div class="err">'+esc(F.err)+'</div>';
@@ -1123,7 +1133,7 @@ function readTxInputs(){
   if(!F||F.type!=="tx")return;
   const fdm=document.getElementById("fdm"),fdv=document.getElementById("fdv");if(fdm)F.descMes=fdm.value;if(fdv)F.descStr=fdv.value;
   const v=document.getElementById("fv"),d=document.getElementById("fd"),p=document.getElementById("fp"),dt=document.getElementById("fdt");
-  if(v)F.valStr=v.value; if(d)F.t.desc=d.value; const pg=document.getElementById("fpg"); if(pg)F.pegoStr=pg.value; const fj=document.getElementById("fj"); if(fj)F.jurosStr=fj.value; if(dt&&dt.value)F.t.data=dt.value;
+  if(v)F.valStr=v.value; if(d)F.t.desc=d.value; const pg=document.getElementById("fpg"); if(pg)F.pegoStr=pg.value; const fvd=document.getElementById("fvd"); if(fvd)F.diaVencStr=fvd.value; const fj=document.getElementById("fj"); if(fj)F.jurosStr=fj.value; if(dt&&dt.value)F.t.data=dt.value;
   if(p){const n=parseInt(p.value,10);F.t.parcelas=Math.min(120,Math.max(1,isNaN(n)?1:n));}
   const jp=document.getElementById("fjp");if(jp){const k=parseInt(jp.value,10);F.t.jaPagas=Math.min(F.t.parcelas-1,Math.max(0,isNaN(k)?0:k));}
 }
@@ -1150,6 +1160,7 @@ function updatePreview(){
   if(nT>1&&kP>0)s=nT+'x de '+fmt(ps[0].valor)+' · já pagou '+kP+', faltam <b>'+ps.length+'</b> ('+fmt(ps.reduce((a,p)=>a+p.valor,0))+')<br>'+(kP+1)+'ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
   else if(ps.length>1)s=ps.length+'x de '+fmt(ps[0].valor)+(ps[ps.length-1].valor!==ps[0].valor?' (última '+fmt(ps[ps.length-1].valor)+')':'')+' · total '+fmt(tot)+'<br>1ª parcela em <b>'+nomeMes(ps[0].mes)+'</b>, última em <b>'+nomeMes(ps[ps.length-1].mes)+'</b>';
   else s='Entra na fatura que vence em <b>'+nomeMes(ps[0].mes)+'</b>';
+  if(ehEmprestimo(card)){const dv=Math.min(31,Math.max(1,parseInt(F.diaVencStr,10)||diaVencTx(tmp)));s=ps.length+' parcela(s) de '+fmt(ps[0].valor)+'<br>Próxima vence em <b>'+fmtDataAno(dataDe(ps[0].mes,dv))+'</b>, última em <b>'+fmtDataAno(dataDe(ps[ps.length-1].mes,dv))+'</b>';}
   el.innerHTML='<div class="hint">'+s+'</div>'+limH;
 }
 async function saveTx(){
@@ -1166,7 +1177,8 @@ async function saveTx(){
   if(t.tipo!=="entrada"&&F.descStr&&F.descStr.trim()){const dv=parseMoney(F.descStr);
     if(isNaN(dv)||dv<0){F.err="Valor pago com desconto inválido.";drawTx();return;}
     const mesD=F.descMes||expand(Object.assign({},t,{valor:tot,descontos:{}}))[0].mes;descontos[mesD]=dv;}
-  const o={kind:"tx",id:t.id||uid(),juros:jv,parciais:t.parciais||{},antecipadas:t.antecipadas||[],descontos,pego:ehEmprestimo(t.metodo==="cartao"?cardById(t.cardId):null)?pgv:0,tipo:t.tipo,valor:tot,desc:(t.desc||"").trim(),categoria:t.categoria,
+  const o={kind:"tx",id:t.id||uid(),juros:jv,parciais:t.parciais||{},antecipadas:t.antecipadas||[],descontos,pego:ehEmprestimo(t.metodo==="cartao"?cardById(t.cardId):null)?pgv:0,
+    diaVenc:ehEmprestimo(t.metodo==="cartao"?cardById(t.cardId):null)?(Math.min(31,Math.max(1,parseInt(F.diaVencStr,10)||0))||null):null,tipo:t.tipo,valor:tot,desc:(t.desc||"").trim(),categoria:t.categoria,
     metodo:t.tipo==="entrada"?"entrada":t.metodo,cardId:t.metodo==="cartao"?t.cardId:null,parcelas:t.parcelas||1,jaPagas:(t.parcelas>1?t.jaPagas||0:0),data:t.data,pagas:t.pagas||[]};
   const novo=!t.id;
   closeSheet();
@@ -1388,7 +1400,7 @@ document.addEventListener("input",ev=>{
   if(ev.target.id==="busca"){S.busca=ev.target.value;buscaAtualiza();return;}
   if(ev.target.id==="antv"&&F&&F.type==="antecip"){F.valStr=ev.target.value;antRes();return;}
   if(!F||F.type!=="tx")return;
-  if(["fv","fp","fdt","fjp","fpg"].includes(ev.target.id)){readTxInputs();updatePreview();}
+  if(["fv","fp","fdt","fjp","fpg","fvd"].includes(ev.target.id)){readTxInputs();updatePreview();}
 });
 document.addEventListener("keydown",ev=>{
   if(ev.target.id==="busca"&&ev.key==="Enter"){ev.preventDefault();ev.target.blur();return;}
@@ -1410,7 +1422,12 @@ function persist(){
   try{localStorage.setItem(KEY,JSON.stringify(mem));return true;}
   catch(e){S.note="Não consegui salvar no celular (memória cheia?). Faça um backup agora.";render();return false;}
 }
-function applyAll(){S.items=new Map(Object.values(mem).map(o=>[o.id,o]));if(!S.loaded)S.month=perHoje();S.loaded=true;render();}
+function migraEmprestimos(){let mud=false;
+  Object.values(mem).forEach(c=>{if(c.kind!=="card"||c.tipo!=="emprestimo"||!(c.pagas||[]).length)return;
+    Object.values(mem).forEach(t=>{if(t.kind==="tx"&&t.cardId===c.id){const add=c.pagas.filter(m=>!(t.pagas||[]).includes(m));if(add.length)t.pagas=(t.pagas||[]).concat(add);}});
+    c.pagas=[];mud=true;});
+  if(mud)persist();}
+function applyAll(){migraEmprestimos();S.items=new Map(Object.values(mem).map(o=>[o.id,o]));if(!S.loaded)S.month=perHoje();S.loaded=true;render();}
 store={
   async set(o){mem[o.id]=JSON.parse(JSON.stringify(o));persist();applyAll();},
   async del(id){delete mem[id];persist();applyAll();}
