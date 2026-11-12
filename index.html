@@ -147,7 +147,7 @@ mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 1px
 (function(){
 "use strict";
 // ---------- Constantes ----------
-const VERSAO="12/nov · saldo nas contas";
+const VERSAO="12/nov · detalhe das categorias";
 const DEF_OUT=[["Mercado","#4f8a5b"],["Casa","#8a6a4f"],["Contas","#5b6f9a"],["Empréstimo","#c0446b"],["Eletrodomésticos","#4a86c8"],["Roupas e calçados","#d65fa8"],["Transporte","#c08a2e"],["Saúde","#b5432f"],["Educação","#7a5aa6"],["Lazer","#e07b9a"],["Compras","#3a9aa0"],["Alimentação fora","#e07b39"],["Outros","#8a8a85"]];
 const DEF_IN=[["Salário","#7b4bb7"],["Extra","#3a9aa0"],["Outros","#8a8a85"]];
 const PALETA=["#9b6bdc","#e57fc0","#4a86c8","#3a9aa0","#4f8a5b","#c08a2e","#e07b39","#c0446b","#7a5aa6","#8a6a4f","#5b6f9a","#d0679a"];
@@ -477,8 +477,8 @@ function itemLi(x){
     +'<span style="display:block;font-size:12px;color:'+(late?"var(--red)":"var(--muted)")+'">vence '+fmtData(x.venc)+(x.parte?' · pago '+fmt(x.parte)+' de '+fmt(x.total):'')+'</span></button><span>'+fmt(x.v)+'</span></li>';
 }
 function paiLi(v){
-  return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="dei-pai" data-v="'+v+'" aria-label="Registrar que dei pro pai"></button>'
-    +'<button data-a="dei-pai" data-v="'+v+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">👨 Passar pro pai<span style="display:block;font-size:12px;color:var(--muted)">sua parte nas contas dele '+(modoPeriodo()?"deste período":"deste mês")+'</span></button><span>'+fmt(v)+'</span></li>';
+  return '<li style="align-items:center;gap:10px;padding:5px 0"><button class="check" data-a="dei-pai" data-v="'+v+'" aria-label="Registrar pagamento ao pai"></button>'
+    +'<button data-a="dei-pai" data-v="'+v+'" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)">👨 Pagar ao pai<span style="display:block;font-size:12px;color:var(--muted)">sua parte nas contas dele '+(modoPeriodo()?"deste período":"deste mês")+'</span></button><span>'+fmt(v)+'</span></li>';
 }
 function paiAPagar(P){return temPai()?Math.max(0,saldoPai(P)):0;}
 function payCard(P){
@@ -522,7 +522,7 @@ function caixaPer(P,hoje){
   const r=calcMes(P);let ent=0,sai=0;
   r.parcelas.forEach(p=>{const t=p.tx;
     if(t.tipo==="entrada"){if(t.data<=hoje)ent+=p.valor;return;}
-    if(t.metodo==="pai")return;            // conta do pai: sai pelo "Dei pro pai"
+    if(t.metodo==="pai")return;            // conta do pai: sai pelo "Paguei ao pai"
     if(p.card&&!empP(p))return;            // cartão: sai quando paga a fatura
     const v=p.valor+jurosTx(p);
     if(baixaP(p))sai+=pago(t,p.mes)?v:pagoParte(t,p.mes);
@@ -608,7 +608,7 @@ function parteForm(t,id,m){
    +(lst.length?'<label class="f">Pagamentos feitos</label><div class="list">'+lst.map(x=>'<div class="row"><div class="main"><div class="t">'+fmt(x.valor)+(x.nota?' · '+esc(x.nota):'')+'</div><div class="s">'+fmtDataAno(x.data)+'</div></div><button class="x" style="font-size:18px" data-a="del-parte" data-id="'+x.id+'" aria-label="Apagar pagamento">×</button></div>').join("")+'</div>':'')
    +(ja?'<div class="hint">Esta conta está marcada como paga ✓</div>'
      :'<label class="f">Paguei uma parte</label><input class="inp money money-in" id="qv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">'
-      +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="qd" value="'+todayStr()+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="qn" placeholder="Ex.: dei pro pai"></div></div>'
+      +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="qd" value="'+todayStr()+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="qn" placeholder="Ex.: Pix"></div></div>'
       +'<div id="qerr"></div><button class="btn" data-a="save-parte">Registrar pagamento parcial</button>'
       +(t==="bol"?'<label class="f" style="margin-top:16px">Ou: paguei com desconto e quitei</label><input class="inp money-in" id="qdv" inputmode="numeric" placeholder="Valor que você pagou de verdade"><button class="btn ghost" style="color:var(--accent)" data-a="save-desc">Quitar com este valor</button>'
         :t==="fat"?'<div class="hint" style="margin-top:10px">Pagou alguma parcela com desconto? Abra a fatura na tela principal, toque na parcela e preencha "Valor pago com desconto".</div>':''))
@@ -636,19 +636,19 @@ async function addRepasse(v,d,nota){const o=paiObj();await store.set(Object.assi
 function paiSecao(P,r){
   if(!temPai())return"";
   const per=modoPeriodo(),deste=repassesPer(P).sort((a,b)=>b.data.localeCompare(a.data)),dei=deste.reduce((a,x)=>a+x.valor,0),saldo=saldoPai(P,r),q=per?"período":"mês";
-  return '<section><h2>👨 Conta com o pai <button class="btn small" data-a="dei-pai" data-v="'+Math.max(0,saldo)+'">+ Dei pro pai</button></h2><div class="list">'
+  return '<section><h2>👨 Conta com o pai <button class="btn small" data-a="dei-pai" data-v="'+Math.max(0,saldo)+'">+ Paguei ao pai</button></h2><div class="list">'
    +'<div class="row"><div class="main"><div class="t">Sua parte nas contas dele</div><div class="s">o que vence neste '+q+'</div></div><div class="v">'+fmt(r.pai)+'</div></div>'
-   +deste.map(x=>'<div class="row"><div class="main"><div class="t">Dei pro pai'+(x.nota?' · '+esc(x.nota):'')+'</div><div class="s">'+fmtDataAno(x.data)+'</div></div><div class="v pos">'+fmt(x.valor)+'</div><button class="x" style="font-size:18px" data-a="del-repasse" data-id="'+x.id+'" aria-label="Apagar">×</button></div>').join("")
-   +'<div class="row"><div class="main"><div class="t" style="font-weight:650">'+(saldo>0.005?"Falta passar pro pai":saldo<-0.005?"Você deu a mais neste "+q:(r.pai>0||dei>0?"Tudo acertado neste "+q+" ✓":"Nada com o pai neste "+q))+'</div><div class="s">só o que é deste '+q+'</div></div><div class="v '+(saldo>0.005?"neg":"pos")+'">'+fmt(Math.abs(saldo))+'</div></div>'
+   +deste.map(x=>'<div class="row"><div class="main"><div class="t">Pagamento ao pai'+(x.nota?' · '+esc(x.nota):'')+'</div><div class="s">'+fmtDataAno(x.data)+'</div></div><div class="v pos">'+fmt(x.valor)+'</div><button class="x" style="font-size:18px" data-a="del-repasse" data-id="'+x.id+'" aria-label="Apagar">×</button></div>').join("")
+   +'<div class="row"><div class="main"><div class="t" style="font-weight:650">'+(saldo>0.005?"Falta pagar ao pai":saldo<-0.005?"Você deu a mais neste "+q:(r.pai>0||dei>0?"Tudo acertado neste "+q+" ✓":"Nada com o pai neste "+q))+'</div><div class="s">só o que é deste '+q+'</div></div><div class="v '+(saldo>0.005?"neg":"pos")+'">'+fmt(Math.abs(saldo))+'</div></div>'
    +'</div></section>';
 }
 function paiForm(v){
   const P=S.month,d=P===perHoje()?todayStr():dataDe(P,diaIni());
   F={type:"pai"};
-  openSheet('<h3>Dei pro pai<button class="x" data-a="close">×</button></h3>'
+  openSheet('<h3>Pagamento ao pai<button class="x" data-a="close">×</button></h3>'
    +'<input class="inp money money-in" id="pv" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off" value="'+(v>0?esc(moneyIn(v)):"")+'">'
    +'<div class="two"><div><label class="f">Data</label><input class="inp" type="date" id="pd" value="'+d+'"></div><div><label class="f">Observação (opcional)</label><input class="inp" id="pn" placeholder="Ex.: Pix"></div></div>'
-   +'<div class="hint">Falta passar em '+nomePer(P)+': <b>'+fmt(Math.max(0,saldoPai(P)))+'</b><br>O valor abate do '+(modoPeriodo()?"período":"mês")+' da data escolhida.</div><div id="perr"></div>'
+   +'<div class="hint">Falta pagar ao pai em '+nomePer(P)+': <b>'+fmt(Math.max(0,saldoPai(P)))+'</b><br>O valor abate do '+(modoPeriodo()?"período":"mês")+' da data escolhida.</div><div id="perr"></div>'
    +'<button class="btn" data-a="save-pai" data-v="deu">Registrar</button>');
   setTimeout(()=>{const e=document.getElementById("pv");e&&e.focus();},50);
 }
@@ -882,14 +882,44 @@ function lancMesHTML(r){
 function porCatHTML(r){
   const cats=Object.entries(r.porCat).sort((a,b)=>b[1]-a[1]);
   let h='<section><h2>Para onde foi o dinheiro</h2><div class="list">';
-  if(!cats.length)h+='<div class="empty">Sem saídas neste mês.</div>';
+  if(!cats.length)h+='<div class="empty">Sem saídas '+(modoPeriodo()?"neste período":"neste mês")+'.</div>';
   const max=cats.length?cats[0][1]:1;
   cats.forEach(([c,v])=>{
     const pct=r.saidas?Math.round(v/r.saidas*100):0;
-    h+='<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>'+esc(c)+' <span class="s" style="color:var(--muted);font-size:12px">'+pct+'%</span></span><span class="v">'+fmt(v)+'</span></div><div class="bar"><i style="width:'+(v/max*100)+'%;background:'+(catColor(c,false))+'"></i></div></div>';
+    h+='<button class="row" style="display:block;width:100%" data-a="ver-cat" data-v="'+esc(c)+'"><div style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(c)+' <span class="s" style="color:var(--muted);font-size:12px">'+pct+'% · '+catItens(r,c).length+' item(ns)</span></span><span class="v">'+fmt(v)+' <span style="color:var(--muted)">›</span></span></div><div class="bar"><i style="width:'+(v/max*100)+'%;background:'+(catColor(c,false))+'"></i></div></button>';
   });
+  if(cats.length)h+='<p style="font-size:12px;color:var(--muted);margin:6px 2px 0">Toque numa categoria para ver o que tem dentro.</p>';
   h+='</div></section>';
   return h;
+}
+const metNome=m=>(METODOS.find(x=>x[0]===m)||["","Outro"])[1];
+function catItens(r,cat){
+  const L=[];
+  r.parcelas.forEach(p=>{const t=p.tx;if(t.tipo==="entrada")return;const j=jurosTx(p),nome=(t.desc||t.categoria)+(p.n>1?' ('+p.i+'/'+p.n+')':'');
+    const d=p.fixa?t.data:((p.n>1||empP(p))?vencP(p):t.data);
+    const sub=p.fixa?'conta fixa no 💳 '+p.card.nome:p.card?(empP(p)?'💸 ':'💳 ')+p.card.nome:metNome(t.metodo);
+    const a=p.fixa?{a:"fixa-mes",id:p.fixa.id,m:p.m}:{a:"edit-tx",id:t.id};
+    if((t.categoria||"Outros")===cat)L.push({d,nome,sub,v:p.valor,go:a,desc:p.desc?p.orig:null});
+    if(j&&cat===CAT_JUROS)L.push({d,nome:'Juros · '+nome,sub,v:j,go:a});
+  });
+  r.fixas.forEach(x=>{const f=x.f;if(f.tipo==="entrada"||fixaNoCartao(f))return;const d=dataDe(x.m,f.dia),go={a:"fixa-mes",id:f.id,m:x.m};
+    if((f.categoria||"Outros")===cat)L.push({d,nome:f.desc,sub:'conta fixa'+(f.metodo==="pai"?' · 👨 pai paga':''),v:x.v,go});
+    if(x.j&&cat===CAT_JUROS)L.push({d,nome:'Juros · '+f.desc,sub:'conta fixa',v:x.j,go});});
+  r.cofre.forEach(({m,d})=>{if(d.valor>=0&&cat===CAT_COFRE)L.push({d:d.data,nome:(m.emoji||'🐷')+' '+m.nome,sub:'guardei'+(d.nota?' · '+d.nota:''),v:d.valor,go:{a:"edit-meta",id:m.id}});});
+  r.antecip.forEach(({c,a})=>{if((a.categoria||"Outros")===cat)L.push({d:a.data,nome:'Antecipação · '+c.nome,sub:a.itens.length+' parcela(s) · economizou '+fmt(a.original-a.valor),v:a.valor,go:{a:"ver-antecip",id:c.id,v:a.id}});});
+  return L.sort((a,b)=>b.d.localeCompare(a.d)||b.v-a.v);
+}
+function catDetalhe(cat){
+  const r=calcMes(S.month),L=catItens(r,cat),tot=L.reduce((a,x)=>a+x.v,0),pct=r.saidas?Math.round(tot/r.saidas*100):0;
+  F={type:"cat",cat,ordem:F&&F.type==="cat"&&F.cat===cat?F.ordem:"data"};
+  const ls=F.ordem==="valor"?L.slice().sort((a,b)=>b.v-a.v):L;
+  const at=g=>'data-a="'+g.a+'"'+(g.id?' data-id="'+g.id+'"':'')+(g.m?' data-m="'+g.m+'"':'')+(g.v?' data-v="'+g.v+'"':'');
+  openSheet('<h3><span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:'+catColor(cat,false)+';width:12px;height:12px"></span>'+esc(cat)+'</span><button class="x" data-a="close">×</button></h3>'
+   +'<div style="font-size:13px;color:var(--muted);margin:-6px 0 10px">'+nomePer(S.month)+'</div>'
+   +'<div class="tiles" style="margin:0 0 10px"><div class="tile"><small>Total</small><b class="neg">'+fmt(tot)+'</b></div><div class="tile"><small>Das saídas</small><b>'+pct+'%</b></div><div class="tile"><small>Itens</small><b>'+L.length+'</b></div></div>'
+   +'<div class="seg" style="margin:0 0 8px"><button class="'+(F.ordem==="data"?"on":"")+'" data-a="cat-ordem" data-v="data">Mais recentes</button><button class="'+(F.ordem==="valor"?"on":"")+'" data-a="cat-ordem" data-v="valor">Maiores valores</button></div>'
+   +'<div class="list">'+(ls.length?ls.map(x=>'<button class="row" '+at(x.go)+'><div class="main"><div class="t">'+esc(x.nome)+'</div><div class="s">'+fmtData(x.d)+' · '+esc(x.sub)+(x.desc!=null?' · <span class="pos">com desconto (era '+fmt(x.desc)+')</span>':'')+'</div></div><div class="v">'+fmt(x.v)+'</div></button>').join(""):'<div class="empty">Nada nesta categoria.</div>')+'</div>'
+   +'<p style="font-size:12px;color:var(--muted);margin:8px 0 0">Toque num item para abrir e editar.</p>');
 }
 
 function viewFuturo(){
@@ -1448,6 +1478,8 @@ document.addEventListener("click",async ev=>{
     case"pagar-parte":parteForm(b.dataset.t,id,b.dataset.m);break;
     case"emp-grupo":empGrupo(id,b.dataset.k);break;
     case"saldo":saldoForm();break;
+    case"ver-cat":catDetalhe(b.dataset.v);break;
+    case"cat-ordem":if(F&&F.type==="cat"){F.ordem=b.dataset.v;catDetalhe(F.cat);}break;
     case"save-saldo":{const v=parseMoney(document.getElementById("sv").value);if(isNaN(v)){saldoRes();break;}
       closeSheet();await store.set(Object.assign({},S.items.get("config")||{kind:"config",id:"config"},cfg(),{kind:"config",id:"config",saldoAjuste:Math.round((v-saldoBruto())*100)/100,saldoData:todayStr()}));toast("Saldo salvo 💜");break;}
     case"pay-emp":{const ps=keysParc(b.dataset.k),desf=!!b.dataset.desfaz;if(b.dataset.fecha)closeSheet();
